@@ -97,7 +97,38 @@ const useTaiwanCalendar = () => {
     return currentDate.toISOString().split('T')[0];
   }, [isWorkingDay]);
 
-  return { isWorkingDay, getExpectedEndDate, loading: false };
+  const getExpectedPoints = useCallback((startDateStr, endDateStr) => {
+    if (!startDateStr || !endDateStr) return 0;
+
+    const startDate = new Date(startDateStr);
+    const endDate = new Date(endDateStr);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return 0;
+    if (endDate < startDate) return 0;
+
+    let cursor = new Date(startDate);
+    let safeCount = 0;
+    while (!isWorkingDay(cursor.toISOString().split('T')[0]) && safeCount < 3660) {
+      cursor.setDate(cursor.getDate() + 1);
+      safeCount++;
+    }
+
+    if (cursor > endDate) return 0;
+
+    let points = 0;
+    safeCount = 0;
+    while (cursor <= endDate && safeCount < 3660) {
+      const dateStr = cursor.toISOString().split('T')[0];
+      if (isWorkingDay(dateStr)) {
+        points++;
+      }
+      cursor.setDate(cursor.getDate() + 1);
+      safeCount++;
+    }
+
+    return points;
+  }, [isWorkingDay]);
+
+  return { isWorkingDay, getExpectedEndDate, getExpectedPoints, loading: false };
 };
 
 // Generate a sequence of dates between start and end
@@ -219,7 +250,7 @@ export default function BurnupChartApp() {
   const [newLogContent, setNewLogContent] = useState("");
   const [newLogDate, setNewLogDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const { getExpectedEndDate, loading: holidayLoading } = useTaiwanCalendar();
+  const { getExpectedEndDate, getExpectedPoints, loading: holidayLoading } = useTaiwanCalendar();
 
   const [newTask, setNewTask] = useState({
     name: "",
@@ -474,12 +505,39 @@ export default function BurnupChartApp() {
     }));
   };
 
+  const updateNewTaskField = useCallback((field, value) => {
+    const isDateField = [
+      'addedDate',
+      'expectedStart',
+      'expectedEnd',
+      'actualStart',
+      'actualEnd'
+    ].includes(field);
+    const normalizedValue = isDateField ? normalizeDateString(value) : value;
+
+    setNewTask(prev => {
+      let updatedTask = { ...prev, [field]: normalizedValue };
+      if (field === 'points' || field === 'expectedStart') {
+        const points = field === 'points' ? normalizedValue : prev.points;
+        const start = field === 'expectedStart' ? normalizedValue : prev.expectedStart;
+        updatedTask.expectedEnd = start && points ? getExpectedEndDate(start, points) : "";
+      }
+      if (field === 'expectedEnd') {
+        const start = prev.expectedStart;
+        if (start && normalizedValue) {
+          updatedTask.points = getExpectedPoints(start, normalizedValue);
+        }
+      }
+      return updatedTask;
+    });
+  }, [getExpectedEndDate, getExpectedPoints]);
+
   const handleAddTask = async (e) => {
     e.preventDefault();
     if (!newTask.name || !newTask.addedDate || !activeProjectId) return;
 
     const taskPayload = buildTaskPayload(newTask);
-    if (taskPayload.expectedStart && taskPayload.points) {
+    if (!taskPayload.expectedEnd && taskPayload.expectedStart && taskPayload.points) {
       taskPayload.expectedEnd = getExpectedEndDate(taskPayload.expectedStart, taskPayload.points);
     }
 
@@ -546,6 +604,12 @@ export default function BurnupChartApp() {
                 updatedTask.expectedEnd = "";
               }
             }
+            if (field === 'expectedEnd') {
+              const start = t.expectedStart;
+              if (start && normalizedValue) {
+                updatedTask.points = getExpectedPoints(start, normalizedValue);
+              }
+            }
             return updatedTask;
           })
         };
@@ -568,6 +632,12 @@ export default function BurnupChartApp() {
       const points = field === 'points' ? Number(value) || 0 : Number(currentTask.points) || 0;
       const start = field === 'expectedStart' ? normalizedValue : currentTask.expectedStart;
       patch.expectedEnd = start && points ? getExpectedEndDate(start, points) : "";
+    }
+    if (field === 'expectedEnd') {
+      const start = currentTask.expectedStart;
+      if (start && normalizedValue) {
+        patch.points = getExpectedPoints(start, normalizedValue);
+      }
     }
 
     try {
@@ -1280,7 +1350,7 @@ export default function BurnupChartApp() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="text-xs font-semibold text-gray-500 uppercase">故事點數</label>
-                        <input type="number" min="0" value={newTask.points} onChange={e => setNewTask({...newTask, points: e.target.value})} className="w-full mt-1 px-3 py-2 bg-gray-50 rounded border border-gray-200 focus:bg-white focus:border-indigo-500 outline-none transition text-sm" />
+                        <input type="number" min="0" value={newTask.points} onChange={e => updateNewTaskField('points', e.target.value)} className="w-full mt-1 px-3 py-2 bg-gray-50 rounded border border-gray-200 focus:bg-white focus:border-indigo-500 outline-none transition text-sm" />
                       </div>
                       <div>
                         <label className="text-xs font-semibold text-gray-500 uppercase">負責人</label>
@@ -1303,8 +1373,8 @@ export default function BurnupChartApp() {
                     <div className="pt-2 border-t border-gray-100">
                       <label className="text-xs font-bold text-blue-600 uppercase mb-2 block">預期時程 (Plan)</label>
                       <div className="grid grid-cols-2 gap-2">
-                        <input type="date" title="預期開始" value={newTask.expectedStart} onChange={e => setNewTask({...newTask, expectedStart: e.target.value})} className="px-2 py-1 bg-blue-50/50 border border-blue-100 rounded text-xs" />
-                        <input type="date" title="預期完成" value={newTask.expectedEnd} onChange={e => setNewTask({...newTask, expectedEnd: e.target.value})} className="px-2 py-1 bg-blue-50/50 border border-blue-100 rounded text-xs" />
+                        <input type="date" title="預期開始" value={newTask.expectedStart} onChange={e => updateNewTaskField('expectedStart', e.target.value)} className="px-2 py-1 bg-blue-50/50 border border-blue-100 rounded text-xs" />
+                        <input type="date" title="預期完成" value={newTask.expectedEnd} onChange={e => updateNewTaskField('expectedEnd', e.target.value)} className="px-2 py-1 bg-blue-50/50 border border-blue-100 rounded text-xs" />
                       </div>
                     </div>
 
