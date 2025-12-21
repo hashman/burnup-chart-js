@@ -28,6 +28,23 @@ npm run build
 npm run preview
 ```
 
+## Backend (FastAPI + SQLite)
+後端放在 `backend`，使用 Python 3.12 與 SQLite 紀錄資料。
+
+```bash
+cd backend
+poetry env use 3.12
+poetry install
+poetry run uvicorn main:app --reload --port 8000
+```
+
+可選環境變數：
+- `BURNUP_DB_PATH`：SQLite 檔案路徑
+- `BURNUP_CORS_ORIGINS`：允許的來源（以逗號分隔）
+
+前端可選環境變數：
+- `VITE_API_BASE_URL`：API 位址（預設 `http://127.0.0.1:8000`）
+
 ## CSV 格式
 匯入時依欄位順序解析（第一列若包含 `name` 會視為表頭略過）。
 

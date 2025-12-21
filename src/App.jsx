@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, ComposedChart, ReferenceLine, ReferenceDot, Label } from 'recharts';
 import { Upload, Download, Plus, Trash2, Calendar, User, Layout, Briefcase, AlertTriangle, CheckCircle2, Filter, Lock, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, Eye, EyeOff, Settings, Percent, MessageSquare, X, Send, Tag, Maximize2, Minimize2, Check } from 'lucide-react';
 import Holidays from 'date-holidays';
@@ -6,6 +6,49 @@ import Holidays from 'date-holidays';
 // --- Utility Functions ---
 
 const generateId = () => Date.now() + Math.random().toString(36).substr(2, 9);
+
+const normalizeDateString = (value) => {
+  if (!value) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(value)) {
+    const [year, month, day] = value.split('/');
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toISOString().split('T')[0];
+};
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+
+const requestJson = async (path, options = {}) => {
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    }
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `Request failed (${response.status})`);
+  }
+
+  if (response.status === 204) return null;
+  return response.json();
+};
+
+const buildTaskPayload = (task) => ({
+  name: task.name || "",
+  points: Number(task.points) || 0,
+  people: task.people || "",
+  addedDate: normalizeDateString(task.addedDate),
+  expectedStart: normalizeDateString(task.expectedStart),
+  expectedEnd: normalizeDateString(task.expectedEnd),
+  actualStart: normalizeDateString(task.actualStart),
+  actualEnd: normalizeDateString(task.actualEnd),
+  showLabel: task.showLabel === true
+});
 
 /**
  * 自定義 Hook: 台灣行事曆邏輯
@@ -59,14 +102,16 @@ const useTaiwanCalendar = () => {
 
 // Generate a sequence of dates between start and end
 const getDateRange = (startDateStr, endDateStr) => {
-  if (!startDateStr || !endDateStr) return [];
+  const startDate = normalizeDateString(startDateStr);
+  const endDate = normalizeDateString(endDateStr);
+  if (!startDate || !endDate) return [];
   const dates = [];
-  let currentDate = new Date(startDateStr);
-  const endDate = new Date(endDateStr);
+  let currentDate = new Date(startDate);
+  const endDateValue = new Date(endDate);
 
   // Safety break to prevent infinite loops if dates are crazy
   let safeCount = 0;
-  while (currentDate <= endDate && safeCount < 3650) { // Limit to ~10 years
+  while (currentDate <= endDateValue && safeCount < 3650) { // Limit to ~10 years
     dates.push(currentDate.toISOString().split('T')[0]);
     currentDate.setDate(currentDate.getDate() + 1);
     safeCount++;
@@ -149,9 +194,13 @@ export default function BurnupChartApp() {
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
   const [activeProjectId, setActiveProjectId] = useState(INITIAL_PROJECTS[0].id);
   const [filterPerson, setFilterPerson] = useState("");
-  const [showAddTask, setShowAddTask] = useState(false);
+  const [showAddTask, setShowAddTask] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [apiAvailable, setApiAvailable] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [editingProjectId, setEditingProjectId] = useState(null);
+  const [projectNameDraft, setProjectNameDraft] = useState("");
 
   // New Project UI State
   const [isCreatingProject, setIsCreatingProject] = useState(false);
@@ -184,6 +233,42 @@ export default function BurnupChartApp() {
     showLabel: false,
     logs: []
   });
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadProjects = async () => {
+      try {
+        const data = await requestJson("/api/projects");
+        if (!isActive) return;
+        if (Array.isArray(data) && data.length > 0) {
+          setProjects(data);
+          setActiveProjectId(data[0].id);
+          setApiAvailable(true);
+        } else {
+          const created = await requestJson("/api/projects", {
+            method: "POST",
+            body: JSON.stringify({ name: "新專案" })
+          });
+          if (!isActive) return;
+          setProjects([created]);
+          setActiveProjectId(created.id);
+          setApiAvailable(true);
+        }
+      } catch (err) {
+        if (!isActive) return;
+        setApiAvailable(false);
+      } finally {
+        if (isActive) setIsLoading(false);
+      }
+    };
+
+    loadProjects();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const fileInputRef = useRef(null);
 
@@ -279,16 +364,25 @@ export default function BurnupChartApp() {
   const { chartData, chartAnnotations } = useMemo(() => {
     if (allTasks.length === 0) return { chartData: [], chartAnnotations: [] };
 
+    const normalizedTasks = allTasks.map(task => ({
+      ...task,
+      addedDate: normalizeDateString(task.addedDate),
+      expectedStart: normalizeDateString(task.expectedStart),
+      expectedEnd: normalizeDateString(task.expectedEnd),
+      actualStart: normalizeDateString(task.actualStart),
+      actualEnd: normalizeDateString(task.actualEnd)
+    }));
+
     let minDate = '9999-12-31';
     let maxDate = '0000-01-01';
 
-    allTasks.forEach(t => {
+    normalizedTasks.forEach(t => {
       if (t.expectedStart && t.expectedStart < minDate) minDate = t.expectedStart;
       if (t.expectedEnd && t.expectedEnd > maxDate) maxDate = t.expectedEnd;
     });
 
     if (minDate === '9999-12-31' || maxDate === '0000-01-01') {
-       allTasks.forEach(t => {
+       normalizedTasks.forEach(t => {
         const dates = [t.addedDate, t.actualStart, t.actualEnd].filter(Boolean);
         dates.forEach(d => {
           if (d < minDate) minDate = d;
@@ -305,7 +399,7 @@ export default function BurnupChartApp() {
     const timeline = getDateRange(viewStart, viewEnd);
 
     // Filter active tasks for calculation (scope adjusted to window)
-    const activeTasks = allTasks.filter(t => {
+    const activeTasks = normalizedTasks.filter(t => {
       const taskStart = t.expectedStart || t.addedDate || '9999-12-31';
       const taskEnd = t.actualEnd || t.expectedEnd || taskStart;
       return taskStart <= viewEnd && taskEnd >= viewStart;
@@ -343,25 +437,29 @@ export default function BurnupChartApp() {
     // --- Generate Annotations ---
     // For tasks marked to show label, find their position on the chart
     const annotations = [];
-    allTasks.forEach(t => {
+    normalizedTasks.forEach(t => {
       if (t.showLabel) {
         // Decide which date to attach the label to.
-        // Priority: Actual End (Done) > Expected End (Planned) > Added Date (Start)
-        const targetDate = t.actualEnd || t.expectedEnd || t.addedDate;
+        // Priority: Actual End > Actual Start > Expected Start > Added Date > Expected End
+        const targetDate = t.actualEnd || t.actualStart || t.expectedStart || t.addedDate || t.expectedEnd;
+        const normalizedTargetDate = normalizeDateString(targetDate);
+        if (!normalizedTargetDate) return;
 
         // Find data point for this date to get Y value
-        const point = data.find(d => d.date === targetDate);
-        if (point) {
-          // If task is done, stick to Actual line. If not, stick to Expected line.
-          const yValue = t.actualEnd ? point.ActualPct : point.ExpectedPct;
+        const point = data.find(d => d.date === normalizedTargetDate)
+          || data.find(d => d.date > normalizedTargetDate)
+          || data[data.length - 1];
+        if (!point) return;
 
-          annotations.push({
-            ...t,
-            x: targetDate,
-            y: yValue,
-            isActual: !!t.actualEnd
-          });
-        }
+        // If task is done, stick to Actual line. If not, stick to Expected line.
+        const yValue = t.actualEnd ? point.ActualPct : point.ExpectedPct;
+
+        annotations.push({
+          ...t,
+          x: point.date,
+          y: yValue,
+          isActual: !!t.actualEnd
+        });
       }
     });
 
@@ -376,36 +474,76 @@ export default function BurnupChartApp() {
     }));
   };
 
-  const handleAddTask = (e) => {
+  const handleAddTask = async (e) => {
     e.preventDefault();
-    if (!newTask.name || !newTask.addedDate) return;
-    const task = { ...newTask, id: generateId() };
-    if (task.expectedStart && task.points) {
-       task.expectedEnd = getExpectedEndDate(task.expectedStart, task.points);
+    if (!newTask.name || !newTask.addedDate || !activeProjectId) return;
+
+    const taskPayload = buildTaskPayload(newTask);
+    if (taskPayload.expectedStart && taskPayload.points) {
+      taskPayload.expectedEnd = getExpectedEndDate(taskPayload.expectedStart, taskPayload.points);
     }
-    const updatedProjects = projects.map(p => {
-      if (p.id === activeProjectId) {
-        return { ...p, tasks: [...p.tasks, task] };
+
+    if (apiAvailable) {
+      try {
+        const createdTask = await requestJson(
+          `/api/projects/${activeProjectId}/tasks`,
+          {
+            method: "POST",
+            body: JSON.stringify(taskPayload)
+          }
+        );
+        setProjects(prevProjects => prevProjects.map(p => {
+          if (p.id === activeProjectId) {
+            return { ...p, tasks: [...p.tasks, createdTask] };
+          }
+          return p;
+        }));
+      } catch (err) {
+        setApiAvailable(false);
+        const fallbackTask = { ...taskPayload, id: generateId(), logs: [] };
+        setProjects(prevProjects => prevProjects.map(p => {
+          if (p.id === activeProjectId) {
+            return { ...p, tasks: [...p.tasks, fallbackTask] };
+          }
+          return p;
+        }));
       }
-      return p;
-    });
-    setProjects(updatedProjects);
+    } else {
+      const task = { ...taskPayload, id: generateId(), logs: [] };
+      setProjects(prevProjects => prevProjects.map(p => {
+        if (p.id === activeProjectId) {
+          return { ...p, tasks: [...p.tasks, task] };
+        }
+        return p;
+      }));
+    }
     setNewTask({ name: "", points: 1, people: newTask.people, addedDate: new Date().toISOString().split('T')[0], expectedStart: "", expectedEnd: "", actualStart: "", actualEnd: "", showLabel: false, logs: [] });
   };
 
-  const updateTask = (taskId, field, value) => {
-    const updatedProjects = projects.map(p => {
+  const updateTask = async (taskId, field, value) => {
+    const isDateField = [
+      'addedDate',
+      'expectedStart',
+      'expectedEnd',
+      'actualStart',
+      'actualEnd'
+    ].includes(field);
+    const normalizedValue = isDateField ? normalizeDateString(value) : value;
+
+    setProjects(prevProjects => prevProjects.map(p => {
       if (p.id === activeProjectId) {
         return {
           ...p,
           tasks: p.tasks.map(t => {
             if (t.id !== taskId) return t;
-            let updatedTask = { ...t, [field]: value };
+            let updatedTask = { ...t, [field]: normalizedValue };
             if (field === 'points' || field === 'expectedStart') {
-              const points = field === 'points' ? value : t.points;
-              const start = field === 'expectedStart' ? value : t.expectedStart;
+              const points = field === 'points' ? normalizedValue : t.points;
+              const start = field === 'expectedStart' ? normalizedValue : t.expectedStart;
               if (start && points) {
                 updatedTask.expectedEnd = getExpectedEndDate(start, points);
+              } else {
+                updatedTask.expectedEnd = "";
               }
             }
             return updatedTask;
@@ -413,51 +551,143 @@ export default function BurnupChartApp() {
         };
       }
       return p;
-    });
-    setProjects(updatedProjects);
+    }));
+
+    if (!apiAvailable) return;
+    const currentTask = allTasks.find(t => t.id === taskId);
+    if (!currentTask) return;
+
+    const patch = { [field]: normalizedValue };
+    if (field === 'points') {
+      patch.points = Number(value) || 0;
+    }
+    if (field === 'showLabel') {
+      patch.showLabel = value === true;
+    }
+    if (field === 'points' || field === 'expectedStart') {
+      const points = field === 'points' ? Number(value) || 0 : Number(currentTask.points) || 0;
+      const start = field === 'expectedStart' ? normalizedValue : currentTask.expectedStart;
+      patch.expectedEnd = start && points ? getExpectedEndDate(start, points) : "";
+    }
+
+    try {
+      const updatedTask = await requestJson(`/api/tasks/${taskId}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch)
+      });
+      setProjects(prevProjects => prevProjects.map(p => {
+        if (p.id !== activeProjectId) return p;
+        return {
+          ...p,
+          tasks: p.tasks.map(t => (t.id === taskId ? updatedTask : t))
+        };
+      }));
+    } catch (err) {
+      setApiAvailable(false);
+    }
   };
 
-  const deleteTask = (taskId) => {
-    const updatedProjects = projects.map(p => {
+  const deleteTask = async (taskId) => {
+    if (!activeProjectId) return;
+
+    if (apiAvailable) {
+      try {
+        await requestJson(`/api/tasks/${taskId}`, { method: "DELETE" });
+      } catch (err) {
+        setApiAvailable(false);
+      }
+    }
+
+    setProjects(prevProjects => prevProjects.map(p => {
       if (p.id === activeProjectId) {
         return { ...p, tasks: p.tasks.filter(t => t.id !== taskId) };
       }
       return p;
-    });
-    setProjects(updatedProjects);
+    }));
   };
 
-  const handleAddLog = (e) => {
+  const handleAddLog = async (e) => {
     e.preventDefault();
     if (!newLogContent || !activeLogTaskId) return;
 
-    const newLog = {
-      id: generateId(),
-      date: newLogDate,
-      content: newLogContent
-    };
-
-    const updatedProjects = projects.map(p => {
-      if (p.id === activeProjectId) {
-        return {
-          ...p,
-          tasks: p.tasks.map(t => {
-            if (t.id === activeLogTaskId) {
-              return { ...t, logs: [...(t.logs || []), newLog] };
-            }
-            return t;
-          })
+    if (apiAvailable) {
+      try {
+        const createdLog = await requestJson(`/api/tasks/${activeLogTaskId}/logs`, {
+          method: "POST",
+          body: JSON.stringify({ date: newLogDate, content: newLogContent })
+        });
+        setProjects(prevProjects => prevProjects.map(p => {
+          if (p.id === activeProjectId) {
+            return {
+              ...p,
+              tasks: p.tasks.map(t => {
+                if (t.id === activeLogTaskId) {
+                  return { ...t, logs: [...(t.logs || []), createdLog] };
+                }
+                return t;
+              })
+            };
+          }
+          return p;
+        }));
+      } catch (err) {
+        setApiAvailable(false);
+        const fallbackLog = {
+          id: generateId(),
+          date: newLogDate,
+          content: newLogContent
         };
+        setProjects(prevProjects => prevProjects.map(p => {
+          if (p.id === activeProjectId) {
+            return {
+              ...p,
+              tasks: p.tasks.map(t => {
+                if (t.id === activeLogTaskId) {
+                  return { ...t, logs: [...(t.logs || []), fallbackLog] };
+                }
+                return t;
+              })
+            };
+          }
+          return p;
+        }));
       }
-      return p;
-    });
-
-    setProjects(updatedProjects);
+    } else {
+      const newLog = {
+        id: generateId(),
+        date: newLogDate,
+        content: newLogContent
+      };
+      setProjects(prevProjects => prevProjects.map(p => {
+        if (p.id === activeProjectId) {
+          return {
+            ...p,
+            tasks: p.tasks.map(t => {
+              if (t.id === activeLogTaskId) {
+                return { ...t, logs: [...(t.logs || []), newLog] };
+              }
+              return t;
+            })
+          };
+        }
+        return p;
+      }));
+    }
     setNewLogContent("");
   };
 
-  const handleDeleteLog = (logId) => {
-    const updatedProjects = projects.map(p => {
+  const handleDeleteLog = async (logId) => {
+    if (!activeLogTaskId) return;
+
+    if (apiAvailable) {
+      try {
+        await requestJson(`/api/logs/${logId}`, { method: "DELETE" });
+      } catch (err) {
+        setApiAvailable(false);
+      }
+    }
+
+    setProjects(prevProjects => prevProjects.map(p => {
       if (p.id === activeProjectId) {
         return {
           ...p,
@@ -470,18 +700,35 @@ export default function BurnupChartApp() {
         };
       }
       return p;
-    });
-    setProjects(updatedProjects);
+    }));
   };
 
-  const handleCreateProjectSave = () => {
-    if (newProjectName.trim()) {
-      const newProj = { id: generateId(), name: newProjectName.trim(), tasks: [] };
-      setProjects([...projects, newProj]);
+  const handleCreateProjectSave = async () => {
+    if (!newProjectName.trim()) return;
+
+    const projectName = newProjectName.trim();
+    if (apiAvailable) {
+      try {
+        const createdProject = await requestJson("/api/projects", {
+          method: "POST",
+          body: JSON.stringify({ name: projectName })
+        });
+        setProjects(prevProjects => [...prevProjects, createdProject]);
+        setActiveProjectId(createdProject.id);
+      } catch (err) {
+        setApiAvailable(false);
+        const newProj = { id: generateId(), name: projectName, tasks: [] };
+        setProjects(prevProjects => [...prevProjects, newProj]);
+        setActiveProjectId(newProj.id);
+      }
+    } else {
+      const newProj = { id: generateId(), name: projectName, tasks: [] };
+      setProjects(prevProjects => [...prevProjects, newProj]);
       setActiveProjectId(newProj.id);
-      setNewProjectName("");
-      setIsCreatingProject(false);
     }
+
+    setNewProjectName("");
+    setIsCreatingProject(false);
   };
 
   const handleCreateProjectCancel = () => {
@@ -489,25 +736,83 @@ export default function BurnupChartApp() {
     setIsCreatingProject(false);
   };
 
-  const deleteProject = (e, projId) => {
+  const startProjectRename = (project) => {
+    setEditingProjectId(project.id);
+    setProjectNameDraft(project.name || "");
+  };
+
+  const cancelProjectRename = () => {
+    setEditingProjectId(null);
+    setProjectNameDraft("");
+  };
+
+  const commitProjectRename = async (projectId) => {
+    if (editingProjectId !== projectId) return;
+    const nextName = projectNameDraft.trim();
+    if (!nextName) {
+      cancelProjectRename();
+      return;
+    }
+
+    if (apiAvailable) {
+      try {
+        const updatedProject = await requestJson(`/api/projects/${projectId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name: nextName })
+        });
+        setProjects(prevProjects => prevProjects.map(p => {
+          if (p.id === projectId) {
+            return { ...p, name: updatedProject.name };
+          }
+          return p;
+        }));
+      } catch (err) {
+        setApiAvailable(false);
+        setProjects(prevProjects => prevProjects.map(p => {
+          if (p.id === projectId) {
+            return { ...p, name: nextName };
+          }
+          return p;
+        }));
+      }
+    } else {
+      setProjects(prevProjects => prevProjects.map(p => {
+        if (p.id === projectId) {
+          return { ...p, name: nextName };
+        }
+        return p;
+      }));
+    }
+
+    cancelProjectRename();
+  };
+
+  const deleteProject = async (e, projId) => {
     e.stopPropagation();
     if (projects.length <= 1) {
       alert("至少需要保留一個專案。");
       return;
     }
     // if (!window.confirm("確定要刪除整個專案及其所有任務嗎？")) return;
+    if (apiAvailable) {
+      try {
+        await requestJson(`/api/projects/${projId}`, { method: "DELETE" });
+      } catch (err) {
+        setApiAvailable(false);
+      }
+    }
     const newProjects = projects.filter(p => p.id !== projId);
     setProjects(newProjects);
-    if (activeProjectId === projId) {
+    if (activeProjectId === projId && newProjects.length > 0) {
       setActiveProjectId(newProjects[0].id);
     }
   };
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file || !activeProjectId) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const csv = event.target.result;
         const lines = csv.split('\n');
@@ -523,23 +828,55 @@ export default function BurnupChartApp() {
               name: parts[0]?.trim() || "Untitled",
               points: parseInt(parts[1]) || 1,
               people: parts[2]?.trim() || "",
-              addedDate: parts[3]?.trim() || "",
-              expectedStart: parts[4]?.trim() || "",
-              expectedEnd: parts[5]?.trim() || "",
-              actualStart: parts[6]?.trim() || "",
-              actualEnd: parts[7]?.trim() || "",
+              addedDate: normalizeDateString(parts[3]?.trim()),
+              expectedStart: normalizeDateString(parts[4]?.trim()),
+              expectedEnd: normalizeDateString(parts[5]?.trim()),
+              actualStart: normalizeDateString(parts[6]?.trim()),
+              actualEnd: normalizeDateString(parts[7]?.trim()),
               showLabel: false,
               logs: []
             });
           }
         }
-        const updatedProjects = projects.map(p => {
-          if (p.id === activeProjectId) {
-            return { ...p, tasks: parsedTasks };
+        if (apiAvailable) {
+          try {
+            await Promise.all(
+              (activeProject.tasks || []).map(task =>
+                requestJson(`/api/tasks/${task.id}`, { method: "DELETE" })
+              )
+            );
+            const createdTasks = await Promise.all(
+              parsedTasks.map(task => requestJson(
+                `/api/projects/${activeProjectId}/tasks`,
+                {
+                  method: "POST",
+                  body: JSON.stringify(buildTaskPayload(task))
+                }
+              ))
+            );
+            setProjects(prevProjects => prevProjects.map(p => {
+              if (p.id === activeProjectId) {
+                return { ...p, tasks: createdTasks };
+              }
+              return p;
+            }));
+          } catch (err) {
+            setApiAvailable(false);
+            setProjects(prevProjects => prevProjects.map(p => {
+              if (p.id === activeProjectId) {
+                return { ...p, tasks: parsedTasks };
+              }
+              return p;
+            }));
           }
-          return p;
-        });
-        setProjects(updatedProjects);
+        } else {
+          setProjects(prevProjects => prevProjects.map(p => {
+            if (p.id === activeProjectId) {
+              return { ...p, tasks: parsedTasks };
+            }
+            return p;
+          }));
+        }
       } catch (err) {
         alert("CSV 解析失敗。");
       }
@@ -636,6 +973,14 @@ export default function BurnupChartApp() {
       </ComposedChart>
     </ResponsiveContainer>
   );
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-100 text-gray-600 flex items-center justify-center">
+        <div className="text-sm">載入資料中...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 font-sans pb-10">
@@ -761,7 +1106,37 @@ export default function BurnupChartApp() {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}
                 `}
               >
-                {proj.name}
+                {editingProjectId === proj.id ? (
+                  <input
+                    type="text"
+                    value={projectNameDraft}
+                    onChange={(e) => setProjectNameDraft(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={() => commitProjectRename(proj.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        e.currentTarget.blur();
+                      }
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        cancelProjectRename();
+                      }
+                    }}
+                    className="text-sm border border-gray-300 rounded px-2 py-1 w-40 focus:border-indigo-500 outline-none"
+                    autoFocus
+                  />
+                ) : (
+                  <span
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      startProjectRename(proj);
+                    }}
+                    title="雙擊改名"
+                  >
+                    {proj.name}
+                  </span>
+                )}
                 <button
                   onClick={(e) => deleteProject(e, proj.id)}
                   className={`opacity-0 group-hover:opacity-100 p-1 rounded-full hover:bg-gray-200 ${projects.length === 1 ? 'hidden' : ''}`}

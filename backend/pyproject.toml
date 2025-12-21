@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "burnup-backend"
+version = "0.1.0"
+description = "FastAPI backend for burnup chart"
+authors = ["Burnup Chart <dev@local>"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "0.115.5"
+uvicorn = {version = "0.30.6", extras = ["standard"]}
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.3"
+httpx = "^0.27.2"
+
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"

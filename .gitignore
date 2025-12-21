@@ -5,3 +5,9 @@ dist
 playwright-report
 test-results
 .playwright
+backend/.venv
+backend/__pycache__
+backend/data/*.db
+backend/data/*.sqlite3
+.pytest_cache
+__pycache__
