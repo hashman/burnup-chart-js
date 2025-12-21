@@ -1,68 +1,33 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useCallback } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, ComposedChart, ReferenceLine, ReferenceDot, Label } from 'recharts';
 import { Upload, Download, Plus, Trash2, Calendar, User, Layout, Briefcase, AlertTriangle, CheckCircle2, Filter, Lock, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, Eye, EyeOff, Settings, Percent, MessageSquare, X, Send, Tag, Maximize2, Minimize2, Check } from 'lucide-react';
+import Holidays from 'date-holidays';
 
 // --- Utility Functions ---
 
 const generateId = () => Date.now() + Math.random().toString(36).substr(2, 9);
 
-// 備用：簡單的台灣國定假日清單 (當 API 無法連線時使用)
-const FALLBACK_HOLIDAYS = [
-  "2024-01-01", "2024-02-08", "2024-02-09", "2024-02-12", "2024-02-13", "2024-02-14", "2024-02-28", "2024-04-04", "2024-04-05", "2024-05-01", "2024-06-10", "2024-09-17", "2024-10-10",
-  "2025-01-01", "2025-01-25", "2025-01-26", "2025-01-27", "2025-01-28", "2025-01-29", "2025-01-30", "2025-01-31", "2025-02-28", "2025-04-03", "2025-04-04", "2025-05-01", "2025-05-31", "2025-10-06", "2025-10-10"
-];
-
 /**
  * 自定義 Hook: 台灣行事曆邏輯
- * 模擬 Library 的功能，自動抓取開源資料並提供日期計算方法
+ * 使用 date-holidays library 提供日期計算方法
  */
 const useTaiwanCalendar = () => {
-  const [holidays, setHolidays] = useState(new Set(FALLBACK_HOLIDAYS));
-  const [loading, setLoading] = useState(true);
-
-  // 嘗試從開源 API 獲取 2024-2025 的行事曆資料
-  useEffect(() => {
-    const fetchHolidays = async () => {
-      try {
-        const years = [2024, 2025];
-        const fetchedDates = new Set(FALLBACK_HOLIDAYS);
-
-        for (const year of years) {
-          // 使用 jsdelivr CDN 取得台灣行事曆資料 (感謝 ruyut/TaiwanCalendar 開源專案)
-          const response = await fetch(`https://cdn.jsdelivr.net/gh/ruyut/TaiwanCalendar/data/${year}.json`);
-          if (response.ok) {
-            const data = await response.json();
-            // data format example: { date: "20240101", isHoliday: true, ... }
-            data.forEach(day => {
-              if (day.isHoliday) {
-                // Convert "20240101" to "2024-01-01"
-                const formattedDate = `${day.date.substring(0, 4)}-${day.date.substring(4, 6)}-${day.date.substring(6, 8)}`;
-                fetchedDates.add(formattedDate);
-              }
-            });
-          }
-        }
-        setHolidays(fetchedDates);
-        console.log("Holidays updated from remote source:", fetchedDates.size);
-      } catch (error) {
-        console.warn("Failed to fetch holidays, using fallback data.", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchHolidays();
+  const holidayApi = useMemo(() => {
+    const hd = new Holidays('TW');
+    hd.setLanguages('zh');
+    return hd;
   }, []);
 
   // 判斷是否為工作日
   const isWorkingDay = useCallback((dateStr) => {
     const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return false;
     const day = date.getDay();
     // 0 = Sunday, 6 = Saturday
     if (day === 0 || day === 6) return false;
-    if (holidays.has(dateStr)) return false;
+    if (holidayApi.isHoliday(date)) return false;
     return true;
-  }, [holidays]);
+  }, [holidayApi]);
 
   // 計算預期完成日 (跳過假日)
   const getExpectedEndDate = useCallback((startDateStr, points) => {
@@ -89,7 +54,7 @@ const useTaiwanCalendar = () => {
     return currentDate.toISOString().split('T')[0];
   }, [isWorkingDay]);
 
-  return { isWorkingDay, getExpectedEndDate, loading };
+  return { isWorkingDay, getExpectedEndDate, loading: false };
 };
 
 // Generate a sequence of dates between start and end

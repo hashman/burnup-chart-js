@@ -54,7 +54,7 @@ API 設計,5,Alice,2024-03-01,2024-03-01,2024-03-07,2024-03-02,2024-03-08,true
 注意：目前匯入時會忽略 `ShowLabel` 欄位，匯出會固定產出該欄位。
 
 ## 假日資料來源
-台灣國定假日會嘗試從 `ruyut/TaiwanCalendar` 的 jsdelivr CDN 取得（2024-2025），若失敗則使用內建備用清單。
+台灣國定假日由 `date-holidays` library 依 TW 規則計算，不需遠端 API。
 
 ## 專案結構
 - `src/App.jsx`：主要 UI 與邏輯
