@@ -1031,7 +1031,11 @@ export default function BurnupChartApp() {
                         const { expectedPct, actualPct } = getProgressStats(task);
 
                         return (
-                          <tr key={task.id} className={`${rowClass} transition-colors group`}>
+                          <tr
+                            key={task.id}
+                            className={`${rowClass} transition-colors group`}
+                            data-task-name={task.name}
+                          >
                             <td className="px-4 py-2 text-center">
                               <button
                                 onClick={(e) => { e.stopPropagation(); updateTask(task.id, 'showLabel', !task.showLabel); }}
