@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, ComposedChart, ReferenceLine, ReferenceDot, Label } from 'recharts';
-import { Upload, Download, Plus, Trash2, Calendar, User, Layout, Briefcase, AlertTriangle, CheckCircle2, Filter, Lock, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, Eye, EyeOff, Settings, Percent, MessageSquare, X, Send, Tag, Maximize2, Minimize2, Check } from 'lucide-react';
+import { Upload, Download, Plus, Trash2, Calendar, User, Layout, Briefcase, AlertTriangle, CheckCircle2, Filter, Lock, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, Eye, EyeOff, Settings, Percent, MessageSquare, X, Send, Tag, Maximize2, Minimize2, Check, BarChart2, TrendingUp, Clock } from 'lucide-react';
 import Holidays from 'date-holidays';
 
 // --- Utility Functions ---
@@ -221,6 +221,71 @@ const INITIAL_PROJECTS = [
   }
 ];
 
+// --- Custom Tooltip Component for Burnup Chart ---
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    const dayAdded = data.dayAdded || [];
+    const dayPlanned = data.dayPlanned || [];
+    const dayActual = data.dayActual || [];
+
+    return (
+      <div className="bg-white/95 backdrop-blur-sm p-3 border border-gray-200 shadow-xl rounded-lg text-sm max-w-xs z-50">
+        <p className="font-bold text-gray-800 mb-2 border-b border-gray-100 pb-1">{label}</p>
+
+        {/* Percentages */}
+        <div className="space-y-1 mb-3">
+          <p className="text-blue-600 flex justify-between gap-4 text-xs">
+            <span>預期進度:</span>
+            <span className="font-mono font-bold">{data.ExpectedPct}%</span>
+          </p>
+          <p className="text-emerald-600 flex justify-between gap-4 text-xs">
+            <span>實際進度:</span>
+            <span className="font-mono font-bold">{data.ActualPct}%</span>
+          </p>
+        </div>
+
+        {/* Events List */}
+        {(dayAdded.length > 0 || dayPlanned.length > 0 || dayActual.length > 0) && (
+          <div className="border-t border-gray-100 pt-2 space-y-2">
+            {dayActual.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold text-emerald-600 mb-0.5 flex items-center gap-1">
+                  <CheckCircle2 size={10} /> 實際完成
+                </p>
+                <ul className="list-disc list-inside text-[10px] text-gray-600 pl-1">
+                  {dayActual.map((t, i) => <li key={i} className="truncate max-w-[200px]">{t}</li>)}
+                </ul>
+              </div>
+            )}
+            {dayPlanned.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold text-blue-500 mb-0.5 flex items-center gap-1">
+                  <Clock size={10} /> 預期完成
+                </p>
+                <ul className="list-disc list-inside text-[10px] text-gray-600 pl-1">
+                  {dayPlanned.map((t, i) => <li key={i} className="truncate max-w-[200px]">{t}</li>)}
+                </ul>
+              </div>
+            )}
+            {dayAdded.length > 0 && (
+              <div>
+                <p className="text-[10px] font-bold text-gray-500 mb-0.5 flex items-center gap-1">
+                  <Plus size={10} /> 新增任務
+                </p>
+                <ul className="list-disc list-inside text-[10px] text-gray-600 pl-1">
+                  {dayAdded.map((t, i) => <li key={i} className="truncate max-w-[200px]">{t}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+  return null;
+};
+
 export default function BurnupChartApp() {
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
   const [activeProjectId, setActiveProjectId] = useState(INITIAL_PROJECTS[0].id);
@@ -237,6 +302,12 @@ export default function BurnupChartApp() {
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
 
+  // Chart View State (Trend vs Gantt)
+  const [chartView, setChartView] = useState("trend");
+
+  // Gantt Chart Hover State
+  const [ganttTooltip, setGanttTooltip] = useState(null);
+
   // Date Range State for Chart
   const [chartConfig, setChartConfig] = useState({
     isAuto: true,
@@ -247,6 +318,7 @@ export default function BurnupChartApp() {
 
   // State for Logs Modal
   const [activeLogTaskId, setActiveLogTaskId] = useState(null);
+  const [detailTaskId, setDetailTaskId] = useState(null);
   const [newLogContent, setNewLogContent] = useState("");
   const [newLogDate, setNewLogDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -330,6 +402,19 @@ export default function BurnupChartApp() {
     allTasks.find(t => t.id === activeLogTaskId),
   [allTasks, activeLogTaskId]);
 
+  const activeDetailTask = useMemo(() =>
+    allTasks.find(t => t.id === detailTaskId),
+  [allTasks, detailTaskId]);
+
+  const normalizedTasks = useMemo(() => allTasks.map(task => ({
+    ...task,
+    addedDate: normalizeDateString(task.addedDate),
+    expectedStart: normalizeDateString(task.expectedStart),
+    expectedEnd: normalizeDateString(task.expectedEnd),
+    actualStart: normalizeDateString(task.actualStart),
+    actualEnd: normalizeDateString(task.actualEnd)
+  })), [allTasks]);
+
   // --- Workload Validation Logic ---
   const getTaskValidationStatus = (currentTask, tasksToValidateAgainst) => {
     if (!currentTask.people) return 'normal';
@@ -391,18 +476,9 @@ export default function BurnupChartApp() {
     return { expectedPct, actualPct };
   };
 
-  // --- Chart Data Logic ---
-  const { chartData, chartAnnotations } = useMemo(() => {
-    if (allTasks.length === 0) return { chartData: [], chartAnnotations: [] };
-
-    const normalizedTasks = allTasks.map(task => ({
-      ...task,
-      addedDate: normalizeDateString(task.addedDate),
-      expectedStart: normalizeDateString(task.expectedStart),
-      expectedEnd: normalizeDateString(task.expectedEnd),
-      actualStart: normalizeDateString(task.actualStart),
-      actualEnd: normalizeDateString(task.actualEnd)
-    }));
+  // --- Date Range Calculation for Both Charts ---
+  const dateRangeStats = useMemo(() => {
+    if (normalizedTasks.length === 0) return { minDate: '', maxDate: '', timeline: [] };
 
     let minDate = '9999-12-31';
     let maxDate = '0000-01-01';
@@ -413,7 +489,7 @@ export default function BurnupChartApp() {
     });
 
     if (minDate === '9999-12-31' || maxDate === '0000-01-01') {
-       normalizedTasks.forEach(t => {
+      normalizedTasks.forEach(t => {
         const dates = [t.addedDate, t.actualStart, t.actualEnd].filter(Boolean);
         dates.forEach(d => {
           if (d < minDate) minDate = d;
@@ -422,18 +498,26 @@ export default function BurnupChartApp() {
       });
     }
 
-    if (minDate === '9999-12-31') return { chartData: [], chartAnnotations: [] };
+    if (minDate === '9999-12-31') return { minDate: '', maxDate: '', timeline: [] };
 
     const viewStart = chartConfig.isAuto ? minDate : (chartConfig.startDate || minDate);
     const viewEnd = chartConfig.isAuto ? maxDate : (chartConfig.endDate || maxDate);
-
     const timeline = getDateRange(viewStart, viewEnd);
+
+    return { minDate: viewStart, maxDate: viewEnd, timeline };
+  }, [normalizedTasks, chartConfig]);
+
+  // --- Burnup Chart Data Logic ---
+  const { chartData, chartAnnotations } = useMemo(() => {
+    if (dateRangeStats.timeline.length === 0) return { chartData: [], chartAnnotations: [] };
+
+    const { timeline, minDate, maxDate } = dateRangeStats;
 
     // Filter active tasks for calculation (scope adjusted to window)
     const activeTasks = normalizedTasks.filter(t => {
       const taskStart = t.expectedStart || t.addedDate || '9999-12-31';
       const taskEnd = t.actualEnd || t.expectedEnd || taskStart;
-      return taskStart <= viewEnd && taskEnd >= viewStart;
+      return taskStart <= maxDate && taskEnd >= minDate;
     });
 
     // Calculate Fixed Total Scope (Denominator for Percentage Mode)
@@ -442,6 +526,10 @@ export default function BurnupChartApp() {
     const data = timeline.map(date => {
       let expectedCompleted = 0;
       let actualCompleted = 0;
+
+      const dayAdded = [];
+      const dayPlanned = [];
+      const dayActual = [];
 
       activeTasks.forEach(task => {
         const points = parseInt(task.points) || 0;
@@ -453,6 +541,10 @@ export default function BurnupChartApp() {
         if (task.actualEnd && task.actualEnd <= date) {
           actualCompleted += points;
         }
+
+        if (task.addedDate === date) dayAdded.push(task.name);
+        if (task.expectedEnd === date) dayPlanned.push(task.name);
+        if (task.actualEnd === date) dayActual.push(task.name);
       });
 
       const expectedPct = fixedTotalScope > 0 ? (expectedCompleted / fixedTotalScope) * 100 : 0;
@@ -461,7 +553,10 @@ export default function BurnupChartApp() {
       return {
         date,
         ExpectedPct: parseFloat(expectedPct.toFixed(1)),
-        ActualPct: parseFloat(actualPct.toFixed(1))
+        ActualPct: parseFloat(actualPct.toFixed(1)),
+        dayAdded,
+        dayPlanned,
+        dayActual
       };
     });
 
@@ -495,7 +590,194 @@ export default function BurnupChartApp() {
     });
 
     return { chartData: data, chartAnnotations: annotations };
-  }, [allTasks, chartConfig]);
+  }, [normalizedTasks, dateRangeStats]);
+
+  // --- Gantt Chart Rendering Logic ---
+  const renderGanttChart = () => {
+    const { minDate, maxDate, timeline } = dateRangeStats;
+    if (timeline.length === 0) return <div className="text-center text-gray-400 py-20">無資料可顯示</div>;
+
+    const startDateObj = new Date(minDate);
+    const endDateObj = new Date(maxDate);
+    if (Number.isNaN(startDateObj.getTime()) || Number.isNaN(endDateObj.getTime())) {
+      return <div className="text-center text-gray-400 py-20">無資料可顯示</div>;
+    }
+
+    const totalDuration = (endDateObj - startDateObj) / (1000 * 60 * 60 * 24) + 1;
+
+    // Group tasks by person
+    const peopleGroups = {};
+    uniquePeople.forEach(p => {
+      peopleGroups[p] = [];
+    });
+    const unassignedTasks = [];
+
+    normalizedTasks.forEach(t => {
+      const personKey = t.people?.trim();
+      if (personKey && peopleGroups[personKey]) {
+        peopleGroups[personKey].push({ ...t, people: personKey });
+      } else if (!personKey) {
+        unassignedTasks.push(t);
+      } else {
+        unassignedTasks.push({ ...t, people: personKey });
+      }
+    });
+
+    const getBarStyles = (startStr, endStr, isActual = false) => {
+      if (!startStr || !endStr) return null;
+      const startRaw = new Date(startStr);
+      const endRaw = new Date(endStr);
+      if (Number.isNaN(startRaw.getTime()) || Number.isNaN(endRaw.getTime())) return null;
+
+      const start = startRaw < startDateObj ? startDateObj : startRaw;
+      const end = endRaw > endDateObj ? endDateObj : endRaw;
+
+      const offsetDays = (start - startDateObj) / (1000 * 60 * 60 * 24);
+      const durationDays = (end - start) / (1000 * 60 * 60 * 24) + 1;
+
+      if (offsetDays < 0 && (offsetDays + durationDays) <= 0) return null;
+      if (offsetDays >= totalDuration) return null;
+
+      const left = Math.max(0, (offsetDays / totalDuration) * 100);
+      const width = Math.min(100 - left, (durationDays / totalDuration) * 100);
+
+      return {
+        left: `${left}%`,
+        width: `${width}%`,
+        position: 'absolute',
+        top: isActual ? '50%' : '10%',
+        height: '40%',
+      };
+    };
+
+    return (
+      <div className="w-full h-full overflow-hidden flex flex-col border border-gray-200 rounded-lg relative">
+        {/* Header (Dates) */}
+        <div className="flex bg-gray-50 border-b border-gray-200 h-10 shrink-0">
+          <div className="w-32 shrink-0 border-r border-gray-200 p-2 text-xs font-bold text-gray-500 flex items-center justify-center bg-gray-100">
+            人員 / 時間
+          </div>
+          <div className="flex-1 relative overflow-hidden">
+            {/* Simplified Timeline Header */}
+            <div className="absolute inset-0 flex items-center text-xs text-gray-400">
+              {/* Just showing start/end for simplicity in HTML implementation */}
+              <div className="absolute left-2">{minDate}</div>
+              <div className="absolute right-2">{maxDate}</div>
+              <div className="w-full h-px bg-gray-200 absolute bottom-0"></div>
+              {/* Render grid lines approximately */}
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="absolute top-0 bottom-0 w-px bg-gray-100" style={{ left: `${(i + 1) * 20}%` }}></div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Body (Rows) */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-white">
+          {Object.entries(peopleGroups).map(([person, pTasks]) => (
+            <div key={person} className="flex border-b border-gray-100 h-16 group hover:bg-gray-50/50 transition">
+              <div className="w-32 shrink-0 border-r border-gray-200 p-2 flex items-center gap-2 bg-gray-50/30">
+                <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold">
+                  {person.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-sm font-medium text-gray-700 truncate" title={person}>{person}</span>
+              </div>
+              <div className="flex-1 relative h-full">
+                {/* Grid Lines */}
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="absolute top-0 bottom-0 w-px bg-gray-50" style={{ left: `${(i + 1) * 20}%` }}></div>
+                ))}
+
+                {/* Tasks Bars */}
+                {pTasks.map(task => {
+                  const planStyle = getBarStyles(task.expectedStart, task.expectedEnd, false);
+                  const actStyle = getBarStyles(task.actualStart, task.actualEnd, true);
+
+                  const tooltipContent = {
+                    name: task.name,
+                    start: task.expectedStart,
+                    end: task.expectedEnd,
+                    type: '預期',
+                    color: 'text-blue-600',
+                    points: task.points
+                  };
+
+                  const actualTooltipContent = {
+                    name: task.name,
+                    start: task.actualStart,
+                    end: task.actualEnd,
+                    type: '實際',
+                    color: 'text-emerald-600',
+                    points: task.points
+                  };
+
+                  return (
+                    <React.Fragment key={task.id}>
+                      {planStyle && (
+                        <div
+                          className="absolute bg-blue-300/80 rounded-sm cursor-pointer hover:bg-blue-400 z-10 flex items-center px-1 overflow-hidden transition-colors border border-blue-300"
+                          style={planStyle}
+                          onClick={(e) => { e.stopPropagation(); setDetailTaskId(task.id); }}
+                          onMouseMove={(e) => setGanttTooltip({ x: e.clientX, y: e.clientY, content: tooltipContent })}
+                          onMouseLeave={() => setGanttTooltip(null)}
+                        >
+                          <span className="text-[10px] text-blue-900 font-medium whitespace-nowrap truncate">{task.name}</span>
+                        </div>
+                      )}
+                      {actStyle && (
+                        <div
+                          className="absolute bg-emerald-500 rounded-sm cursor-pointer hover:bg-emerald-600 z-20 shadow-sm flex items-center px-1 overflow-hidden transition-colors border border-emerald-600"
+                          style={actStyle}
+                          onClick={(e) => { e.stopPropagation(); setDetailTaskId(task.id); }}
+                          onMouseMove={(e) => setGanttTooltip({ x: e.clientX, y: e.clientY, content: actualTooltipContent })}
+                          onMouseLeave={() => setGanttTooltip(null)}
+                        >
+                          {!planStyle && <span className="text-[10px] text-white whitespace-nowrap truncate">{task.name}</span>}
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          {/* Unassigned row if needed */}
+          {unassignedTasks.length > 0 && (
+            <div className="flex border-b border-gray-100 h-16 bg-gray-50/20">
+              <div className="w-32 shrink-0 border-r border-gray-200 p-2 flex items-center justify-center text-xs text-gray-400">
+                未指派
+              </div>
+              <div className="flex-1 relative">
+                {unassignedTasks.map(task => {
+                  const planStyle = getBarStyles(task.expectedStart, task.expectedEnd, false);
+                  const tooltipContent = {
+                    name: task.name,
+                    start: task.expectedStart,
+                    end: task.expectedEnd,
+                    type: '未指派',
+                    color: 'text-gray-600',
+                    points: task.points
+                  };
+                  return planStyle ? (
+                    <div
+                      key={task.id}
+                      className="absolute bg-gray-300 rounded-sm flex items-center px-1 overflow-hidden cursor-pointer hover:bg-gray-400 transition-colors"
+                      style={planStyle}
+                      onClick={(e) => { e.stopPropagation(); setDetailTaskId(task.id); }}
+                      onMouseMove={(e) => setGanttTooltip({ x: e.clientX, y: e.clientY, content: tooltipContent })}
+                      onMouseLeave={() => setGanttTooltip(null)}
+                    >
+                      <span className="text-[10px] text-gray-600 font-medium whitespace-nowrap truncate">{task.name}</span>
+                    </div>
+                  ) : null;
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const updateChartConfig = (field, value) => {
     setChartConfig(prev => ({
@@ -995,10 +1277,7 @@ export default function BurnupChartApp() {
           domain={[0, 100]}
           tickFormatter={(val) => `${val}%`}
         />
-        <Tooltip
-          contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-          formatter={(value, name) => [`${value}%`, name]}
-        />
+        <Tooltip content={<CustomTooltip />} />
         <Legend iconType="circle" />
 
         <Line
@@ -1060,11 +1339,39 @@ export default function BurnupChartApp() {
         ))}
       </datalist>
 
+      {/* Floating Tooltip for Gantt Chart */}
+      {ganttTooltip && (
+        <div
+          className="fixed bg-white/95 backdrop-blur-sm p-3 border border-gray-200 shadow-xl rounded-lg text-sm max-w-xs z-[150] pointer-events-none"
+          style={{
+            left: ganttTooltip.x + 15,
+            top: ganttTooltip.y + 15,
+            transform: 'translate(0, 0)'
+          }}
+        >
+          <p className={`font-bold mb-1 ${ganttTooltip.content.color}`}>{ganttTooltip.content.type}</p>
+          <p className="font-medium text-gray-900 mb-2 border-b border-gray-100 pb-1">{ganttTooltip.content.name}</p>
+          <div className="space-y-1 text-xs text-gray-600">
+            <p className="flex gap-2">
+              <Calendar size={12} className="mt-0.5" />
+              <span className="font-mono">{ganttTooltip.content.start} ~ {ganttTooltip.content.end}</span>
+            </p>
+            <p className="flex gap-2">
+              <Tag size={12} className="mt-0.5" />
+              <span>{ganttTooltip.content.points} 點</span>
+            </p>
+          </div>
+          <div className="mt-2 text-[10px] text-gray-400">
+            (點擊查看詳細資訊)
+          </div>
+        </div>
+      )}
+
       {/* Fullscreen Chart Modal */}
       {isFullScreen && (
-        <div className="fixed inset-0 bg-white z-[100] p-6 flex flex-col animate-in fade-in duration-200">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-800">{activeProject.name} - 進度趨勢 (全螢幕)</h2>
+        <div className="fixed inset-0 bg-white z-[100] p-6 flex flex-col animate-in fade-in duration-200" onClick={() => setIsFullScreen(false)}>
+          <div className="flex justify-between items-center mb-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-2xl font-bold text-gray-800">{activeProject.name} - {chartView === 'trend' ? '進度趨勢' : '資源甘特圖'} (全螢幕)</h2>
             <button
               onClick={() => setIsFullScreen(false)}
               className="p-2 bg-gray-100 hover:bg-gray-200 rounded-full transition text-gray-600"
@@ -1073,16 +1380,16 @@ export default function BurnupChartApp() {
               <Minimize2 size={24} />
             </button>
           </div>
-          <div className="flex-1 bg-gray-50 rounded-xl p-4 border border-gray-100 shadow-inner">
-             {renderChart("100%")}
+          <div className="flex-1 bg-gray-50 rounded-xl p-4 border border-gray-100 shadow-inner overflow-hidden" onClick={(e) => e.stopPropagation()}>
+             {chartView === 'trend' ? renderChart("100%") : renderGanttChart()}
           </div>
         </div>
       )}
 
       {/* Log Modal */}
       {activeLogTask && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200" onClick={() => setActiveLogTaskId(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
               <h3 className="font-bold text-gray-800 flex items-center gap-2">
                 <MessageSquare size={18} className="text-indigo-500" />
@@ -1140,6 +1447,125 @@ export default function BurnupChartApp() {
                   <Send size={16} /> 新增紀錄
                 </button>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Detail View Modal */}
+      {activeDetailTask && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4 animate-in fade-in duration-200" onClick={() => setDetailTaskId(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="p-6 border-b border-gray-100 flex justify-between items-start bg-gradient-to-r from-gray-50 to-white">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <h3 className="text-xl font-bold text-gray-900">{activeDetailTask.name}</h3>
+                  {activeDetailTask.showLabel && (
+                    <span className="bg-indigo-100 text-indigo-700 text-[10px] px-2 py-0.5 rounded-full font-medium border border-indigo-200 flex items-center gap-1">
+                      <TrendingUp size={10} /> 納入趨勢
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-4 text-sm text-gray-500">
+                  <span className="flex items-center gap-1"><User size={14}/> {activeDetailTask.people || "未指派"}</span>
+                  <span className="flex items-center gap-1"><Tag size={14}/> {activeDetailTask.points} 點</span>
+                </div>
+              </div>
+              <button onClick={() => setDetailTaskId(null)} className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-8">
+
+              {/* Timeline Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
+                  <Clock size={16} className="text-gray-400"/> 時間安排
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                    <span className="text-xs text-gray-500 block mb-1">新增日期</span>
+                    <span className="font-mono text-gray-800">{activeDetailTask.addedDate || "-"}</span>
+                  </div>
+                  <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
+                    <span className="text-xs text-blue-600 block mb-1">預期時程</span>
+                    <div className="font-mono text-blue-900 text-sm">
+                      {activeDetailTask.expectedStart || "?"} <span className="text-blue-300 mx-1">→</span> {activeDetailTask.expectedEnd || "?"}
+                    </div>
+                  </div>
+                  <div className={`p-3 rounded-xl border ${activeDetailTask.actualStart ? 'bg-emerald-50 border-emerald-100' : 'bg-gray-50 border-gray-100 border-dashed'}`}>
+                    <span className={`text-xs block mb-1 ${activeDetailTask.actualStart ? 'text-emerald-600' : 'text-gray-400'}`}>實際時程</span>
+                    <div className={`font-mono text-sm ${activeDetailTask.actualStart ? 'text-emerald-900' : 'text-gray-400'}`}>
+                      {activeDetailTask.actualStart || "尚未開始"}
+                      {activeDetailTask.actualStart && <span className="text-emerald-300 mx-1">→</span>}
+                      {activeDetailTask.actualEnd || (activeDetailTask.actualStart ? "進行中" : "")}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
+                  <Percent size={16} className="text-gray-400"/> 完成進度
+                </h4>
+                <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
+                  {(() => {
+                    const stats = getProgressStats(activeDetailTask);
+                    return (
+                      <>
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs text-gray-500 mb-1">
+                            <span>時間經過 (Expected)</span>
+                            <span className="font-mono">{stats.expectedPct}%</span>
+                          </div>
+                          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${stats.expectedPct}%` }}></div>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs text-gray-500 mb-1">
+                            <span>實際完成 (Actual)</span>
+                            <span className="font-mono">{stats.actualPct}%</span>
+                          </div>
+                          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${stats.actualPct === 100 ? 'bg-emerald-500' : 'bg-gray-300'}`} style={{ width: `${stats.actualPct}%` }}></div>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Logs Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
+                  <MessageSquare size={16} className="text-gray-400"/> 任務紀錄
+                </h4>
+                <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 min-h-[150px]">
+                  {activeDetailTask.logs && activeDetailTask.logs.length > 0 ? (
+                    <div className="space-y-3">
+                      {activeDetailTask.logs.sort((a, b) => new Date(b.date) - new Date(a.date)).map(log => (
+                        <div key={log.id} className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+                          <div className="flex justify-between items-start mb-2">
+                            <span className="text-xs font-mono text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{log.date}</span>
+                          </div>
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{log.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center text-gray-400 py-8 text-sm">
+                      暫無紀錄
+                    </div>
+                  )}
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -1253,19 +1679,48 @@ export default function BurnupChartApp() {
           <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4">
             <div>
               <div className="flex items-center gap-3">
-                <h2 className="text-lg font-bold text-gray-800">{activeProject.name} - 進度趨勢</h2>
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                  {activeProject.name} - {chartView === 'trend' ? '進度趨勢' : '資源甘特圖'}
+                </h2>
+
+                {/* View Switcher */}
+                <div className="flex bg-gray-100 p-1 rounded-lg">
+                  <button
+                    onClick={() => setChartView('trend')}
+                    className={`p-1.5 rounded transition ${chartView === 'trend' ? 'bg-white shadow text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+                    title="趨勢圖"
+                  >
+                    <TrendingUp size={16} />
+                  </button>
+                  <button
+                    onClick={() => setChartView('gantt')}
+                    className={`p-1.5 rounded transition ${chartView === 'gantt' ? 'bg-white shadow text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
+                    title="甘特圖"
+                  >
+                    <BarChart2 size={16} className="rotate-90" />
+                  </button>
+                </div>
+
                 <button
                   onClick={() => setIsFullScreen(true)}
                   className="text-gray-400 hover:text-indigo-600 transition p-1 hover:bg-indigo-50 rounded"
-                  title="全螢幕顯示 (適合簡報)"
+                  title="全螢幕顯示"
                 >
                   <Maximize2 size={18} />
                 </button>
               </div>
-              <div className="flex gap-4 mt-2 text-sm">
-                 <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-blue-400"></div> 預期進度</div>
-                 <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-emerald-500"></div> 實際進度</div>
-              </div>
+
+              {chartView === 'trend' ? (
+                <div className="flex gap-4 mt-2 text-sm">
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-blue-400"></div> 預期進度</div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-full bg-emerald-500"></div> 實際進度</div>
+                </div>
+              ) : (
+                <div className="flex gap-4 mt-2 text-sm">
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-blue-300/80"></div> 預期時程</div>
+                  <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm bg-emerald-500"></div> 實際時程</div>
+                </div>
+              )}
             </div>
 
             {/* Chart Config Controls */}
@@ -1306,7 +1761,7 @@ export default function BurnupChartApp() {
           </div>
 
           <div className="h-[400px] w-full">
-            {renderChart()}
+            {chartView === 'trend' ? renderChart() : renderGanttChart()}
           </div>
         </div>
 
