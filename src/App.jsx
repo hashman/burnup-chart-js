@@ -18,6 +18,12 @@ const normalizeDateString = (value) => {
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toISOString().split('T')[0];
 };
+const addDays = (dateStr, days) => {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+};
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 const requestJson = async (path, options = {}) => {
@@ -308,6 +314,12 @@ export default function BurnupChartApp() {
   // Gantt Chart Hover State
   const [ganttTooltip, setGanttTooltip] = useState(null);
 
+  // Gantt Drag State
+  const ganttContainerRef = useRef(null);
+  const dragStateRef = useRef(null);
+  const didDragRef = useRef(false);
+  const [draggingInfo, setDraggingInfo] = useState(null);
+
   // Date Range State for Chart
   const [chartConfig, setChartConfig] = useState({
     isAuto: true,
@@ -375,11 +387,105 @@ export default function BurnupChartApp() {
 
   const fileInputRef = useRef(null);
 
+  // 批次更新甘特圖任務日期（拖拉用）
+  const updateTaskDates = useCallback((taskId, barType, newStart, newEnd) => {
+    const newPoints = barType === 'plan' ? getExpectedPoints(newStart, newEnd) : null;
+
+    setProjects(prev => prev.map(p => {
+      if (p.id !== activeProjectId) return p;
+      return {
+        ...p,
+        tasks: p.tasks.map(t => {
+          if (t.id !== taskId) return t;
+          if (barType === 'plan') {
+            return { ...t, expectedStart: newStart, expectedEnd: newEnd, points: newPoints };
+          } else {
+            return { ...t, actualStart: newStart, actualEnd: newEnd };
+          }
+        })
+      };
+    }));
+
+    // 同步 API
+    if (!apiAvailable) return;
+    const patch = barType === 'plan'
+      ? { expectedStart: newStart, expectedEnd: newEnd, points: newPoints }
+      : { actualStart: newStart, actualEnd: newEnd };
+    requestJson(`/api/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    }).catch(() => setApiAvailable(false));
+  }, [activeProjectId, getExpectedPoints, apiAvailable]);
+
+  // 甘特圖拖拉全域事件
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      const ds = dragStateRef.current;
+      if (!ds) return;
+      const deltaX = e.clientX - ds.startMouseX;
+      const deltaDays = Math.round((deltaX / ds.containerWidth) * ds.totalDuration);
+      setDraggingInfo({ taskId: ds.taskId, barType: ds.barType, deltaDays, isResize: ds.isResize, mouseX: e.clientX, mouseY: e.clientY });
+    };
+
+    const handleMouseUp = (e) => {
+      const ds = dragStateRef.current;
+      if (!ds) return;
+      const deltaX = e.clientX - ds.startMouseX;
+      const deltaDays = Math.round((deltaX / ds.containerWidth) * ds.totalDuration);
+      if (Math.abs(e.clientX - ds.startMouseX) > 3) {
+        didDragRef.current = true;
+      }
+      if (deltaDays !== 0) {
+        let newStart, newEnd;
+        if (ds.isResize) {
+          newStart = ds.originalStart;
+          newEnd = addDays(ds.originalEnd, deltaDays);
+          if (newEnd < newStart) newEnd = newStart;
+        } else {
+          newStart = addDays(ds.originalStart, deltaDays);
+          newEnd = addDays(ds.originalEnd, deltaDays);
+        }
+        updateTaskDates(ds.taskId, ds.barType, newStart, newEnd);
+      }
+      dragStateRef.current = null;
+      setDraggingInfo(null);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [updateTaskDates]);
+
   const activeProject = useMemo(() =>
     projects.find(p => p.id === activeProjectId) || projects[0],
   [projects, activeProjectId]);
 
   const allTasks = activeProject.tasks;
+
+  // 拖拉中顯示的日期提示
+  const dragDateHint = useMemo(() => {
+    if (!draggingInfo || draggingInfo.mouseX == null) return null;
+    const task = allTasks.find(t => t.id === draggingInfo.taskId);
+    if (!task) return null;
+    const origStart = draggingInfo.barType === 'plan' ? task.expectedStart : task.actualStart;
+    const origEnd   = draggingInfo.barType === 'plan' ? task.expectedEnd   : task.actualEnd;
+    if (!origStart || !origEnd) return null;
+    let newStart = origStart;
+    let newEnd   = origEnd;
+    if (draggingInfo.isResize) {
+      newEnd = addDays(origEnd, draggingInfo.deltaDays);
+      if (newEnd < newStart) newEnd = newStart;
+    } else {
+      newStart = addDays(origStart, draggingInfo.deltaDays);
+      newEnd   = addDays(origEnd,   draggingInfo.deltaDays);
+    }
+    return { newStart, newEnd, mouseX: draggingInfo.mouseX, mouseY: draggingInfo.mouseY };
+  }, [draggingInfo, allTasks]);
 
   const uniquePeople = useMemo(() => {
     const people = new Set(allTasks.map(t => t.people?.trim()).filter(Boolean));
@@ -607,9 +713,7 @@ export default function BurnupChartApp() {
 
     // Group tasks by person
     const peopleGroups = {};
-    uniquePeople.forEach(p => {
-      peopleGroups[p] = [];
-    });
+    uniquePeople.forEach(p => { peopleGroups[p] = []; });
     const unassignedTasks = [];
 
     normalizedTasks.forEach(t => {
@@ -650,6 +754,73 @@ export default function BurnupChartApp() {
       };
     };
 
+    // 計算拖拉後的 bar 樣式
+    const getDraggedBarStyles = (task, barType, isActual) => {
+      const origStart = barType === 'plan' ? task.expectedStart : task.actualStart;
+      const origEnd   = barType === 'plan' ? task.expectedEnd   : task.actualEnd;
+
+      if (draggingInfo && draggingInfo.taskId === task.id && draggingInfo.barType === barType && draggingInfo.deltaDays !== 0) {
+        let newStart = origStart;
+        let newEnd   = origEnd;
+        if (draggingInfo.isResize) {
+          newEnd = addDays(origEnd, draggingInfo.deltaDays);
+          if (newEnd < newStart) newEnd = newStart;
+        } else {
+          newStart = addDays(origStart, draggingInfo.deltaDays);
+          newEnd   = addDays(origEnd,   draggingInfo.deltaDays);
+        }
+        return getBarStyles(newStart, newEnd, isActual);
+      }
+      return getBarStyles(origStart, origEnd, isActual);
+    };
+
+    // 開始拖拉（移動整個 bar）
+    const handleBarMouseDown = (e, task, barType, originalStart, originalEnd) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const container = ganttContainerRef.current;
+      if (!container) return;
+      const containerRect = container.getBoundingClientRect();
+      dragStateRef.current = {
+        taskId: task.id,
+        barType,
+        startMouseX: e.clientX,
+        originalStart,
+        originalEnd,
+        containerWidth: containerRect.width,
+        totalDuration,
+        isResize: false,
+      };
+      document.body.style.cursor = 'grabbing';
+      document.body.style.userSelect = 'none';
+    };
+
+    // 開始拖拉（調整右側邊界）
+    const handleResizeMouseDown = (e, task, barType, originalStart, originalEnd) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const container = ganttContainerRef.current;
+      if (!container) return;
+      const containerRect = container.getBoundingClientRect();
+      dragStateRef.current = {
+        taskId: task.id,
+        barType,
+        startMouseX: e.clientX,
+        originalStart,
+        originalEnd,
+        containerWidth: containerRect.width,
+        totalDuration,
+        isResize: true,
+      };
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+    };
+
+    const isDraggingThis = (taskId, barType) =>
+      draggingInfo && draggingInfo.taskId === taskId && draggingInfo.barType === barType;
+
     return (
       <div className="w-full h-full overflow-hidden flex flex-col border border-gray-200 rounded-lg relative">
         {/* Header (Dates) */}
@@ -657,14 +828,11 @@ export default function BurnupChartApp() {
           <div className="w-32 shrink-0 border-r border-gray-200 p-2 text-xs font-bold text-gray-500 flex items-center justify-center bg-gray-100">
             人員 / 時間
           </div>
-          <div className="flex-1 relative overflow-hidden">
-            {/* Simplified Timeline Header */}
+          <div ref={ganttContainerRef} className="flex-1 relative overflow-hidden">
             <div className="absolute inset-0 flex items-center text-xs text-gray-400">
-              {/* Just showing start/end for simplicity in HTML implementation */}
               <div className="absolute left-2">{minDate}</div>
               <div className="absolute right-2">{maxDate}</div>
               <div className="w-full h-px bg-gray-200 absolute bottom-0"></div>
-              {/* Render grid lines approximately */}
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="absolute top-0 bottom-0 w-px bg-gray-100" style={{ left: `${(i + 1) * 20}%` }}></div>
               ))}
@@ -690,49 +858,68 @@ export default function BurnupChartApp() {
 
                 {/* Tasks Bars */}
                 {pTasks.map(task => {
-                  const planStyle = getBarStyles(task.expectedStart, task.expectedEnd, false);
-                  const actStyle = getBarStyles(task.actualStart, task.actualEnd, true);
+                  const planStyle = getDraggedBarStyles(task, 'plan', false);
+                  const actStyle  = getDraggedBarStyles(task, 'actual', true);
+                  const isPlanDragging   = isDraggingThis(task.id, 'plan');
+                  const isActualDragging = isDraggingThis(task.id, 'actual');
 
                   const tooltipContent = {
-                    name: task.name,
-                    start: task.expectedStart,
-                    end: task.expectedEnd,
-                    type: '預期',
-                    color: 'text-blue-600',
-                    points: task.points
+                    name: task.name, start: task.expectedStart, end: task.expectedEnd,
+                    type: '預期', color: 'text-blue-600', points: task.points
                   };
-
                   const actualTooltipContent = {
-                    name: task.name,
-                    start: task.actualStart,
-                    end: task.actualEnd,
-                    type: '實際',
-                    color: 'text-emerald-600',
-                    points: task.points
+                    name: task.name, start: task.actualStart, end: task.actualEnd,
+                    type: '實際', color: 'text-emerald-600', points: task.points
                   };
 
                   return (
                     <React.Fragment key={task.id}>
                       {planStyle && (
                         <div
-                          className="absolute bg-blue-300/80 rounded-sm cursor-pointer hover:bg-blue-400 z-10 flex items-center px-1 overflow-hidden transition-colors border border-blue-300"
-                          style={planStyle}
-                          onClick={(e) => { e.stopPropagation(); setDetailTaskId(task.id); }}
-                          onMouseMove={(e) => setGanttTooltip({ x: e.clientX, y: e.clientY, content: tooltipContent })}
+                          className={`absolute rounded-sm z-10 flex items-center px-1 overflow-hidden border border-blue-300 select-none
+                            ${isPlanDragging ? 'bg-blue-400 shadow-lg opacity-90 cursor-grabbing' : 'bg-blue-300/80 hover:bg-blue-400 cursor-grab transition-colors'}`}
+                          style={{ ...planStyle, transition: isPlanDragging ? 'none' : undefined }}
+                          onMouseDown={(e) => handleBarMouseDown(e, task, 'plan', task.expectedStart, task.expectedEnd)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (didDragRef.current) { didDragRef.current = false; return; }
+                            setDetailTaskId(task.id);
+                          }}
+                          onMouseMove={(e) => { if (!dragStateRef.current) setGanttTooltip({ x: e.clientX, y: e.clientY, content: tooltipContent }); }}
                           onMouseLeave={() => setGanttTooltip(null)}
                         >
-                          <span className="text-[10px] text-blue-900 font-medium whitespace-nowrap truncate">{task.name}</span>
+                          <span className="text-[10px] text-blue-900 font-medium whitespace-nowrap truncate flex-1 min-w-0">{task.name}</span>
+                          {/* Resize handle */}
+                          <div
+                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize flex items-center justify-center opacity-0 hover:opacity-100 group-hover:opacity-60"
+                            onMouseDown={(e) => handleResizeMouseDown(e, task, 'plan', task.expectedStart, task.expectedEnd)}
+                          >
+                            <div className="w-0.5 h-3/5 bg-blue-600 rounded-full" />
+                          </div>
                         </div>
                       )}
                       {actStyle && (
                         <div
-                          className="absolute bg-emerald-500 rounded-sm cursor-pointer hover:bg-emerald-600 z-20 shadow-sm flex items-center px-1 overflow-hidden transition-colors border border-emerald-600"
-                          style={actStyle}
-                          onClick={(e) => { e.stopPropagation(); setDetailTaskId(task.id); }}
-                          onMouseMove={(e) => setGanttTooltip({ x: e.clientX, y: e.clientY, content: actualTooltipContent })}
+                          className={`absolute rounded-sm z-20 shadow-sm flex items-center px-1 overflow-hidden border border-emerald-600 select-none
+                            ${isActualDragging ? 'bg-emerald-600 shadow-lg opacity-90 cursor-grabbing' : 'bg-emerald-500 hover:bg-emerald-600 cursor-grab transition-colors'}`}
+                          style={{ ...actStyle, transition: isActualDragging ? 'none' : undefined }}
+                          onMouseDown={(e) => handleBarMouseDown(e, task, 'actual', task.actualStart, task.actualEnd)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (didDragRef.current) { didDragRef.current = false; return; }
+                            setDetailTaskId(task.id);
+                          }}
+                          onMouseMove={(e) => { if (!dragStateRef.current) setGanttTooltip({ x: e.clientX, y: e.clientY, content: actualTooltipContent }); }}
                           onMouseLeave={() => setGanttTooltip(null)}
                         >
-                          {!planStyle && <span className="text-[10px] text-white whitespace-nowrap truncate">{task.name}</span>}
+                          {!planStyle && <span className="text-[10px] text-white whitespace-nowrap truncate flex-1 min-w-0">{task.name}</span>}
+                          {/* Resize handle */}
+                          <div
+                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize flex items-center justify-center opacity-0 hover:opacity-100"
+                            onMouseDown={(e) => handleResizeMouseDown(e, task, 'actual', task.actualStart, task.actualEnd)}
+                          >
+                            <div className="w-0.5 h-3/5 bg-emerald-900 rounded-full" />
+                          </div>
                         </div>
                       )}
                     </React.Fragment>
@@ -749,25 +936,34 @@ export default function BurnupChartApp() {
               </div>
               <div className="flex-1 relative">
                 {unassignedTasks.map(task => {
-                  const planStyle = getBarStyles(task.expectedStart, task.expectedEnd, false);
+                  const planStyle = getDraggedBarStyles(task, 'plan', false);
+                  const isPlanDragging = isDraggingThis(task.id, 'plan');
                   const tooltipContent = {
-                    name: task.name,
-                    start: task.expectedStart,
-                    end: task.expectedEnd,
-                    type: '未指派',
-                    color: 'text-gray-600',
-                    points: task.points
+                    name: task.name, start: task.expectedStart, end: task.expectedEnd,
+                    type: '未指派', color: 'text-gray-600', points: task.points
                   };
                   return planStyle ? (
                     <div
                       key={task.id}
-                      className="absolute bg-gray-300 rounded-sm flex items-center px-1 overflow-hidden cursor-pointer hover:bg-gray-400 transition-colors"
-                      style={planStyle}
-                      onClick={(e) => { e.stopPropagation(); setDetailTaskId(task.id); }}
-                      onMouseMove={(e) => setGanttTooltip({ x: e.clientX, y: e.clientY, content: tooltipContent })}
+                      className={`absolute rounded-sm flex items-center px-1 overflow-hidden border border-gray-400 select-none
+                        ${isPlanDragging ? 'bg-gray-400 shadow-lg opacity-90 cursor-grabbing' : 'bg-gray-300 hover:bg-gray-400 cursor-grab transition-colors'}`}
+                      style={{ ...planStyle, transition: isPlanDragging ? 'none' : undefined }}
+                      onMouseDown={(e) => handleBarMouseDown(e, task, 'plan', task.expectedStart, task.expectedEnd)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (didDragRef.current) { didDragRef.current = false; return; }
+                        setDetailTaskId(task.id);
+                      }}
+                      onMouseMove={(e) => { if (!dragStateRef.current) setGanttTooltip({ x: e.clientX, y: e.clientY, content: tooltipContent }); }}
                       onMouseLeave={() => setGanttTooltip(null)}
                     >
-                      <span className="text-[10px] text-gray-600 font-medium whitespace-nowrap truncate">{task.name}</span>
+                      <span className="text-[10px] text-gray-600 font-medium whitespace-nowrap truncate flex-1 min-w-0">{task.name}</span>
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize flex items-center justify-center opacity-0 hover:opacity-100"
+                        onMouseDown={(e) => handleResizeMouseDown(e, task, 'plan', task.expectedStart, task.expectedEnd)}
+                      >
+                        <div className="w-0.5 h-3/5 bg-gray-600 rounded-full" />
+                      </div>
                     </div>
                   ) : null;
                 })}
@@ -1338,6 +1534,19 @@ export default function BurnupChartApp() {
           <option key={person} value={person} />
         ))}
       </datalist>
+
+      {/* 拖拉中的日期提示 */}
+      {dragDateHint && (
+        <div
+          className="fixed z-[200] pointer-events-none bg-gray-900 text-white text-xs px-2.5 py-1.5 rounded-lg shadow-xl flex items-center gap-1.5 whitespace-nowrap"
+          style={{ left: dragDateHint.mouseX + 14, top: dragDateHint.mouseY - 36 }}
+        >
+          <Calendar size={11} className="shrink-0" />
+          <span className="font-mono font-medium">{dragDateHint.newStart}</span>
+          <span className="opacity-60">→</span>
+          <span className="font-mono font-medium">{dragDateHint.newEnd}</span>
+        </div>
+      )}
 
       {/* Floating Tooltip for Gantt Chart */}
       {ganttTooltip && (
