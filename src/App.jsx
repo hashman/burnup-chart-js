@@ -157,6 +157,7 @@ const getDateRange = (startDateStr, endDateStr) => {
 };
 
 const MERGED_TAB_ID = '__merged__';
+const LS_MERGED_IDS_KEY = 'burnup_merged_project_ids';
 
 // Default Initial Data with Multiple Projects
 const INITIAL_PROJECTS = [
@@ -333,7 +334,7 @@ export default function BurnupChartApp() {
   // Merged View State
   const [mergedProjectIds, setMergedProjectIds] = useState(() => {
     try {
-      const raw = localStorage.getItem('burnup_merged_project_ids');
+      const raw = localStorage.getItem(LS_MERGED_IDS_KEY);
       return raw ? JSON.parse(raw) : [];
     } catch {
       return [];
