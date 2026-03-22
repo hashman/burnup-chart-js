@@ -1911,6 +1911,16 @@ export default function BurnupChartApp() {
         </div>
       )}
 
+      {/* Merged Project Selection Modal */}
+      {showMergedModal && (
+        <MergedProjectModal
+          projects={projects}
+          initialSelectedIds={mergedProjectIds}
+          onConfirm={handleMergedModalConfirm}
+          onCancel={handleMergedModalCancel}
+        />
+      )}
+
       {/* Top Navigation / Tabs */}
       <div className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -2033,6 +2043,30 @@ export default function BurnupChartApp() {
 
         {/* Chart Section */}
         <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
+                {/* Merged View Banner */}
+                {isReadOnly && (
+                  <div className="flex items-center justify-between px-1 py-2 mb-3 bg-violet-50 rounded-lg border border-violet-100">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-gray-500">合併範圍：</span>
+                      {validMergedIds.map(id => {
+                        const proj = projects.find(p => p.id === id);
+                        return proj ? (
+                          <span key={id} className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                            {proj.name}
+                          </span>
+                        ) : null;
+                      })}
+                    </div>
+                    <button
+                      onClick={() => setShowMergedModal(true)}
+                      className="flex items-center gap-1 text-xs text-violet-600 hover:text-violet-800 px-2 py-1 rounded hover:bg-violet-100 transition"
+                      title="重新設定合併專案"
+                    >
+                      <Settings size={12} />
+                      重新設定
+                    </button>
+                  </div>
+                )}
           <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4">
             <div>
               <div className="flex items-center gap-3">
