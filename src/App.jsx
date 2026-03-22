@@ -476,9 +476,23 @@ export default function BurnupChartApp() {
     };
   }, [updateTaskDates]);
 
+  const validMergedIds = useMemo(
+    () => mergedProjectIds.filter(id => projects.some(p => p.id === id)),
+    [projects, mergedProjectIds]
+  );
+
+  const mergedTasks = useMemo(
+    () => projects.filter(p => validMergedIds.includes(p.id)).flatMap(p => p.tasks),
+    [projects, validMergedIds]
+  );
+
+  const isReadOnly = activeProjectId === MERGED_TAB_ID;
+
   const activeProject = useMemo(() =>
-    projects.find(p => p.id === activeProjectId) || projects[0],
-  [projects, activeProjectId]);
+    activeProjectId === MERGED_TAB_ID
+      ? { id: MERGED_TAB_ID, name: '合併檢視', tasks: mergedTasks }
+      : (projects.find(p => p.id === activeProjectId) || projects[0]),
+  [projects, activeProjectId, mergedTasks]);
 
   const allTasks = activeProject.tasks;
 
