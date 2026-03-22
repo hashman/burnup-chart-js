@@ -2329,7 +2329,8 @@ export default function BurnupChartApp() {
                           >
                             <td className="px-4 py-2 text-center">
                               <button
-                                onClick={(e) => { e.stopPropagation(); updateTask(task.id, 'showLabel', !task.showLabel); }}
+                                onClick={(e) => { e.stopPropagation(); if (!isReadOnly) updateTask(task.id, 'showLabel', !task.showLabel); }}
+                                disabled={isReadOnly}
                                 className={`transition p-1 rounded-full ${task.showLabel !== false ? 'text-indigo-600 hover:bg-indigo-50' : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100'}`}
                                 title={task.showLabel !== false ? "隱藏標籤" : "在圖表上顯示標籤"}
                               >
@@ -2346,8 +2347,9 @@ export default function BurnupChartApp() {
                               <input
                                 type="text"
                                 value={task.name}
-                                onChange={(e) => updateTask(task.id, 'name', e.target.value)}
-                                className="w-full bg-transparent border-none focus:ring-0 p-0 font-medium text-gray-900"
+                                onChange={(e) => { if (!isReadOnly) updateTask(task.id, 'name', e.target.value); }}
+                                readOnly={isReadOnly}
+                                className={`w-full bg-transparent border-none focus:ring-0 p-0 font-medium text-gray-900 ${isReadOnly ? 'cursor-default' : ''}`}
                               />
                             </td>
 
@@ -2355,9 +2357,9 @@ export default function BurnupChartApp() {
                               <input
                                 type="number"
                                 value={task.points}
-                                disabled={!!isCompleted}
-                                onChange={(e) => updateTask(task.id, 'points', e.target.value)}
-                                className={`w-full bg-transparent border-none focus:ring-0 p-0 text-center font-mono ${isCompleted ? 'text-gray-400 cursor-not-allowed' : ''}`}
+                                disabled={!!isCompleted || isReadOnly}
+                                onChange={(e) => { if (!isReadOnly) updateTask(task.id, 'points', e.target.value); }}
+                                className={`w-full bg-transparent border-none focus:ring-0 p-0 text-center font-mono ${(isCompleted || isReadOnly) ? 'text-gray-400 cursor-not-allowed' : ''}`}
                                 title={isCompleted ? "任務已完成，無法修改點數" : "修改點數會自動更新預期完成日"}
                               />
                               {isCompleted && <Lock size={10} className="absolute top-1 right-0 text-gray-300" />}
@@ -2369,9 +2371,9 @@ export default function BurnupChartApp() {
                                 <input
                                   type="text"
                                   value={task.people}
-                                  disabled={!!isCompleted}
-                                  onChange={(e) => updateTask(task.id, 'people', e.target.value)}
-                                  className={`w-full bg-transparent border-none focus:ring-0 p-0 ${isCompleted ? 'text-gray-400 cursor-not-allowed' : ''}`}
+                                  disabled={!!isCompleted || isReadOnly}
+                                  onChange={(e) => { if (!isReadOnly) updateTask(task.id, 'people', e.target.value); }}
+                                  className={`w-full bg-transparent border-none focus:ring-0 p-0 ${(isCompleted || isReadOnly) ? 'text-gray-400 cursor-not-allowed' : ''}`}
                                   placeholder="未指派"
                                   list="people-options"
                                 />
@@ -2382,7 +2384,8 @@ export default function BurnupChartApp() {
                               <input
                                 type="date"
                                 value={task.addedDate}
-                                onChange={(e) => updateTask(task.id, 'addedDate', e.target.value)}
+                                readOnly={isReadOnly}
+                                onChange={(e) => { if (!isReadOnly) updateTask(task.id, 'addedDate', e.target.value); }}
                                 className="w-full bg-transparent border-none focus:ring-0 p-0 text-gray-500 text-xs"
                               />
                             </td>
@@ -2412,14 +2415,16 @@ export default function BurnupChartApp() {
                                 <input
                                   type="date"
                                   value={task.expectedStart}
-                                  onChange={(e) => updateTask(task.id, 'expectedStart', e.target.value)}
+                                  readOnly={isReadOnly}
+                                  onChange={(e) => { if (!isReadOnly) updateTask(task.id, 'expectedStart', e.target.value); }}
                                   className="w-full bg-transparent border-b border-transparent hover:border-blue-200 focus:border-blue-400 p-0 text-xs text-blue-800"
                                   title="修改開始日期會自動推算結束日期"
                                 />
                                 <input
                                   type="date"
                                   value={task.expectedEnd}
-                                  onChange={(e) => updateTask(task.id, 'expectedEnd', e.target.value)}
+                                  readOnly={isReadOnly}
+                                  onChange={(e) => { if (!isReadOnly) updateTask(task.id, 'expectedEnd', e.target.value); }}
                                   className="w-full bg-transparent border-b border-transparent hover:border-blue-200 focus:border-blue-400 p-0 text-xs text-blue-800"
                                 />
                               </div>
@@ -2430,42 +2435,46 @@ export default function BurnupChartApp() {
                                 <input
                                   type="date"
                                   value={task.actualStart}
-                                  onChange={(e) => updateTask(task.id, 'actualStart', e.target.value)}
+                                  readOnly={isReadOnly}
+                                  onChange={(e) => { if (!isReadOnly) updateTask(task.id, 'actualStart', e.target.value); }}
                                   className="w-full bg-transparent border-b border-transparent hover:border-emerald-200 focus:border-emerald-400 p-0 text-xs text-emerald-800"
                                 />
                                 <input
                                   type="date"
                                   value={task.actualEnd}
-                                  onChange={(e) => updateTask(task.id, 'actualEnd', e.target.value)}
+                                  readOnly={isReadOnly}
+                                  onChange={(e) => { if (!isReadOnly) updateTask(task.id, 'actualEnd', e.target.value); }}
                                   className="w-full bg-transparent border-b border-transparent hover:border-emerald-200 focus:border-emerald-400 p-0 text-xs text-emerald-800 font-bold"
                                 />
                               </div>
                             </td>
 
                             <td className="px-2 py-2 text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setActiveLogTaskId(task.id);
-                                    setNewLogDate(new Date().toISOString().split('T')[0]);
-                                  }}
-                                  className="text-gray-400 hover:text-indigo-600 p-1 rounded-md hover:bg-indigo-50 transition relative"
-                                  title="紀錄"
-                                >
-                                  <MessageSquare size={16} />
-                                  {(task.logs && task.logs.length > 0) && (
-                                    <span className="absolute top-0 right-0 w-2 h-2 bg-indigo-500 rounded-full border border-white"></span>
-                                  )}
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }}
-                                  className="text-gray-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition"
-                                  title="刪除"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </div>
+                              {!isReadOnly && (
+                                <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveLogTaskId(task.id);
+                                      setNewLogDate(new Date().toISOString().split('T')[0]);
+                                    }}
+                                    className="text-gray-400 hover:text-indigo-600 p-1 rounded-md hover:bg-indigo-50 transition relative"
+                                    title="紀錄"
+                                  >
+                                    <MessageSquare size={16} />
+                                    {(task.logs && task.logs.length > 0) && (
+                                      <span className="absolute top-0 right-0 w-2 h-2 bg-indigo-500 rounded-full border border-white"></span>
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }}
+                                    className="text-gray-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition"
+                                    title="刪除"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         );
