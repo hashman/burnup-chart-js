@@ -2255,7 +2255,7 @@ export default function BurnupChartApp() {
           )}
 
           {/* Task List Table - Expands when form is hidden */}
-          <div className={showAddTask ? "xl:col-span-3" : "xl:col-span-4"}>
+          <div className={(showAddTask && !isReadOnly) ? "xl:col-span-3" : "xl:col-span-4"}>
             <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
 
               <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
