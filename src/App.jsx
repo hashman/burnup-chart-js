@@ -5,7 +5,10 @@ import Holidays from 'date-holidays';
 
 // --- Utility Functions ---
 
-const generateId = () => Date.now() + Math.random().toString(36).substr(2, 9);
+const generateId = () => {
+  const id = Date.now() + Math.random().toString(36).substr(2, 9);
+  return id === MERGED_TAB_ID ? Date.now() + Math.random().toString(36).substr(2, 9) : id;
+};
 
 const normalizeDateString = (value) => {
   if (!value) return "";
