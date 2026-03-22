@@ -476,6 +476,38 @@ export default function BurnupChartApp() {
     };
   }, [updateTaskDates]);
 
+  // 追蹤前一個非 merged 的 activeProjectId，供 Modal 取消時還原
+  useEffect(() => {
+    if (activeProjectId !== MERGED_TAB_ID) {
+      previousProjectIdRef.current = activeProjectId;
+    }
+  }, [activeProjectId]);
+
+  // 切換至合併 tab 時重置 filterPerson
+  useEffect(() => {
+    if (activeProjectId === MERGED_TAB_ID) {
+      setFilterPerson('');
+    }
+  }, [activeProjectId]);
+
+  // 清理已刪除的 stale mergedProjectIds；若全數清空且在合併 tab 則直接開 Modal
+  useEffect(() => {
+    if (validMergedIds.length !== mergedProjectIds.length) {
+      setMergedProjectIds(validMergedIds);
+      localStorage.setItem(LS_MERGED_IDS_KEY, JSON.stringify(validMergedIds));
+      if (validMergedIds.length === 0 && activeProjectId === MERGED_TAB_ID) {
+        setShowMergedModal(true);
+      }
+    }
+  }, [validMergedIds, mergedProjectIds.length, activeProjectId]);
+
+  // 進入合併 tab 且尚未設定時，開啟 Modal
+  useEffect(() => {
+    if (activeProjectId === MERGED_TAB_ID && mergedProjectIds.length === 0) {
+      setShowMergedModal(true);
+    }
+  }, [activeProjectId, mergedProjectIds.length]);
+
   const validMergedIds = useMemo(
     () => mergedProjectIds.filter(id => projects.some(p => p.id === id)),
     [projects, mergedProjectIds]
