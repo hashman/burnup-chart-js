@@ -1982,6 +1982,23 @@ export default function BurnupChartApp() {
               </div>
             ))}
 
+            {/* Divider before merged tab */}
+            <div className="w-px h-5 bg-gray-200 self-center mx-1" />
+
+            {/* Merged View Tab */}
+            <div
+              onClick={handleMergedTabClick}
+              className={`
+                flex items-center gap-1.5 px-4 py-3 border-b-2 cursor-pointer whitespace-nowrap text-sm font-medium transition-colors
+                ${activeProjectId === MERGED_TAB_ID
+                  ? 'border-violet-500 text-violet-600 bg-violet-50/60 rounded-t-lg'
+                  : 'border-dashed border-violet-300 text-violet-400 hover:text-violet-600 hover:border-violet-400'}
+              `}
+            >
+              <TrendingUp size={14} />
+              合併檢視
+            </div>
+
             {isCreatingProject ? (
               <div className="flex items-center gap-1 px-2 py-2 border-b-2 border-transparent">
                 <input
