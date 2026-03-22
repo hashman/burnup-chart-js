@@ -1446,6 +1446,26 @@ export default function BurnupChartApp() {
     cancelProjectRename();
   };
 
+  const handleMergedTabClick = () => {
+    if (previousProjectIdRef.current === null) {
+      previousProjectIdRef.current = projects[0]?.id ?? null;
+    }
+    setActiveProjectId(MERGED_TAB_ID);
+    setFilterPerson('');
+  };
+
+  const handleMergedModalConfirm = (ids) => {
+    setMergedProjectIds(ids);
+    localStorage.setItem(LS_MERGED_IDS_KEY, JSON.stringify(ids));
+    setShowMergedModal(false);
+  };
+
+  const handleMergedModalCancel = () => {
+    setShowMergedModal(false);
+    const fallback = previousProjectIdRef.current ?? projects[0]?.id;
+    if (fallback) setActiveProjectId(fallback);
+  };
+
   const deleteProject = async (e, projId) => {
     e.stopPropagation();
     if (projects.length <= 1) {
