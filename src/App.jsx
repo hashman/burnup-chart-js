@@ -295,6 +295,56 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
+function MergedProjectModal({ projects, initialSelectedIds, onConfirm, onCancel }) {
+  const [selected, setSelected] = React.useState(new Set(initialSelectedIds));
+
+  const toggle = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-80 max-w-full">
+        <h2 className="text-base font-bold text-gray-800 mb-1">選擇要合併的專案</h2>
+        <p className="text-xs text-gray-500 mb-4">可多選，設定將被記住</p>
+        <div className="flex flex-col gap-3 mb-5">
+          {projects.map(p => (
+            <label key={p.id} className="flex items-center gap-3 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selected.has(p.id)}
+                onChange={() => toggle(p.id)}
+                className="w-4 h-4 accent-indigo-600"
+              />
+              {p.name}
+            </label>
+          ))}
+        </div>
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition"
+          >
+            取消
+          </button>
+          <button
+            onClick={() => onConfirm(Array.from(selected))}
+            disabled={selected.size === 0}
+            className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            確認並檢視
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function BurnupChartApp() {
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
   const [activeProjectId, setActiveProjectId] = useState(INITIAL_PROJECTS[0].id);
