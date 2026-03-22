@@ -990,7 +990,7 @@ export default function BurnupChartApp() {
                           className={`absolute rounded-sm z-10 flex items-center px-1 overflow-hidden border border-blue-300 select-none
                             ${isPlanDragging ? 'bg-blue-400 shadow-lg opacity-90 cursor-grabbing' : 'bg-blue-300/80 hover:bg-blue-400 cursor-grab transition-colors'}`}
                           style={{ ...planStyle, transition: isPlanDragging ? 'none' : undefined }}
-                          onMouseDown={(e) => handleBarMouseDown(e, task, 'plan', task.expectedStart, task.expectedEnd)}
+                          onMouseDown={isReadOnly ? undefined : (e) => handleBarMouseDown(e, task, 'plan', task.expectedStart, task.expectedEnd)}
                           onClick={(e) => {
                             e.stopPropagation();
                             if (didDragRef.current) { didDragRef.current = false; return; }
@@ -1003,7 +1003,7 @@ export default function BurnupChartApp() {
                           {/* Resize handle */}
                           <div
                             className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize flex items-center justify-center opacity-0 hover:opacity-100 group-hover:opacity-60"
-                            onMouseDown={(e) => handleResizeMouseDown(e, task, 'plan', task.expectedStart, task.expectedEnd)}
+                            onMouseDown={isReadOnly ? undefined : (e) => handleResizeMouseDown(e, task, 'plan', task.expectedStart, task.expectedEnd)}
                           >
                             <div className="w-0.5 h-3/5 bg-blue-600 rounded-full" />
                           </div>
@@ -1014,7 +1014,7 @@ export default function BurnupChartApp() {
                           className={`absolute rounded-sm z-20 shadow-sm flex items-center px-1 overflow-hidden border border-emerald-600 select-none
                             ${isActualDragging ? 'bg-emerald-600 shadow-lg opacity-90 cursor-grabbing' : 'bg-emerald-500 hover:bg-emerald-600 cursor-grab transition-colors'}`}
                           style={{ ...actStyle, transition: isActualDragging ? 'none' : undefined }}
-                          onMouseDown={(e) => handleBarMouseDown(e, task, 'actual', task.actualStart, task.actualEnd)}
+                          onMouseDown={isReadOnly ? undefined : (e) => handleBarMouseDown(e, task, 'actual', task.actualStart, task.actualEnd)}
                           onClick={(e) => {
                             e.stopPropagation();
                             if (didDragRef.current) { didDragRef.current = false; return; }
@@ -1027,7 +1027,7 @@ export default function BurnupChartApp() {
                           {/* Resize handle */}
                           <div
                             className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize flex items-center justify-center opacity-0 hover:opacity-100"
-                            onMouseDown={(e) => handleResizeMouseDown(e, task, 'actual', task.actualStart, task.actualEnd)}
+                            onMouseDown={isReadOnly ? undefined : (e) => handleResizeMouseDown(e, task, 'actual', task.actualStart, task.actualEnd)}
                           >
                             <div className="w-0.5 h-3/5 bg-emerald-900 rounded-full" />
                           </div>
@@ -1059,7 +1059,7 @@ export default function BurnupChartApp() {
                       className={`absolute rounded-sm flex items-center px-1 overflow-hidden border border-gray-400 select-none
                         ${isPlanDragging ? 'bg-gray-400 shadow-lg opacity-90 cursor-grabbing' : 'bg-gray-300 hover:bg-gray-400 cursor-grab transition-colors'}`}
                       style={{ ...planStyle, transition: isPlanDragging ? 'none' : undefined }}
-                      onMouseDown={(e) => handleBarMouseDown(e, task, 'plan', task.expectedStart, task.expectedEnd)}
+                      onMouseDown={isReadOnly ? undefined : (e) => handleBarMouseDown(e, task, 'plan', task.expectedStart, task.expectedEnd)}
                       onClick={(e) => {
                         e.stopPropagation();
                         if (didDragRef.current) { didDragRef.current = false; return; }
@@ -1071,7 +1071,7 @@ export default function BurnupChartApp() {
                       <span className="text-[10px] text-gray-600 font-medium whitespace-nowrap truncate flex-1 min-w-0">{task.name}</span>
                       <div
                         className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize flex items-center justify-center opacity-0 hover:opacity-100"
-                        onMouseDown={(e) => handleResizeMouseDown(e, task, 'plan', task.expectedStart, task.expectedEnd)}
+                        onMouseDown={isReadOnly ? undefined : (e) => handleResizeMouseDown(e, task, 'plan', task.expectedStart, task.expectedEnd)}
                       >
                         <div className="w-0.5 h-3/5 bg-gray-600 rounded-full" />
                       </div>
@@ -1930,9 +1930,11 @@ export default function BurnupChartApp() {
               <h1 className="text-xl font-bold text-gray-900">專案管理 Burnup</h1>
             </div>
             <div className="flex space-x-2">
-              <button onClick={() => fileInputRef.current.click()} className="p-2 text-gray-500 hover:text-indigo-600 transition" title="匯入 CSV">
-                <Upload size={20} />
-              </button>
+              {!isReadOnly && (
+                <button onClick={() => fileInputRef.current.click()} className="p-2 text-gray-500 hover:text-indigo-600 transition" title="匯入 CSV">
+                  <Upload size={20} />
+                </button>
+              )}
               <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
               <button onClick={exportCSV} className="p-2 text-gray-500 hover:text-indigo-600 transition" title="匯出 CSV">
                 <Download size={20} />
@@ -2160,7 +2162,7 @@ export default function BurnupChartApp() {
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
 
           {/* Add Task Form - Only shown if showAddTask is true */}
-          {showAddTask && (
+          {showAddTask && !isReadOnly && (
             <div className="xl:col-span-1">
                <div className="bg-white p-5 rounded-xl shadow border border-gray-200 sticky top-6">
                   <div className="flex justify-between items-center mb-4">
@@ -2246,7 +2248,7 @@ export default function BurnupChartApp() {
 
               <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
                  <div className="flex items-center gap-3">
-                   {!showAddTask && (
+                   {!showAddTask && !isReadOnly && (
                      <button
                        onClick={() => setShowAddTask(true)}
                        className="flex items-center gap-1 text-sm bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition border border-indigo-200 shadow-sm"
