@@ -107,3 +107,104 @@ test.describe('Burnup Chart App 完整流程測試', () => {
     await expect(fullscreenPanel).not.toBeVisible();
   });
 });
+
+test.describe('合併檢視', () => {
+  test('Scenario: 首次進入合併 tab 應出現 Modal，確認後顯示 banner', async ({ page }) => {
+    // 清除 localStorage
+    await page.goto('/');
+    await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
+    await page.reload();
+
+    // 點擊合併 tab
+    await page.getByText('合併檢視').click();
+
+    // Modal 出現
+    await expect(page.getByText('選擇要合併的專案')).toBeVisible();
+
+    // 勾選第一個 checkbox（至少一個）
+    await page.locator('input[type="checkbox"]').first().check();
+
+    // 點確認
+    await page.getByRole('button', { name: '確認並檢視' }).click();
+
+    // Modal 消失，banner 出現
+    await expect(page.getByText('選擇要合併的專案')).not.toBeVisible();
+    await expect(page.getByText('合併範圍：')).toBeVisible();
+  });
+
+  test('Scenario: 再次進入合併 tab 不再出現 Modal（localStorage 已設定）', async ({ page }) => {
+    await page.goto('/');
+
+    // 先設定 localStorage
+    await page.evaluate(() => {
+      localStorage.setItem('burnup_merged_project_ids', JSON.stringify(['proj_1']));
+    });
+    await page.reload();
+
+    // 點擊合併 tab
+    await page.getByText('合併檢視').click();
+
+    // Modal 不出現
+    await expect(page.getByText('選擇要合併的專案')).not.toBeVisible();
+
+    // banner 出現
+    await expect(page.getByText('合併範圍：')).toBeVisible();
+  });
+
+  test('Scenario: 合併 tab 唯讀 — 無新增表單、無刪除按鈕', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => {
+      localStorage.setItem('burnup_merged_project_ids', JSON.stringify(['proj_1']));
+    });
+    await page.reload();
+
+    await page.getByText('合併檢視').click();
+
+    // 無新增任務表單的 submit 按鈕
+    await expect(page.getByRole('button', { name: '加入任務' })).not.toBeVisible();
+
+    // 無 CSV 匯入按鈕（title 屬性辨識）
+    await expect(page.locator('button[title="匯入 CSV"]')).not.toBeVisible();
+  });
+
+  test('Scenario: 取消 Modal 應切回上一個 tab', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
+    await page.reload();
+
+    // 點合併 tab → Modal 出現
+    await page.getByText('合併檢視').click();
+    await expect(page.getByText('選擇要合併的專案')).toBeVisible();
+
+    // 取消
+    await page.getByRole('button', { name: '取消' }).click();
+
+    // Modal 消失，合併 tab 不再是 active（active tab has border-indigo-500 or border-violet-500 class — check that '合併檢視' text does NOT have violet active styling)
+    await expect(page.getByText('選擇要合併的專案')).not.toBeVisible();
+    // Verify we're back on a regular project tab by checking banner is not visible
+    await expect(page.getByText('合併範圍：')).not.toBeVisible();
+  });
+
+  test('Scenario: 重新設定可更改合併的專案', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(() => {
+      localStorage.setItem('burnup_merged_project_ids', JSON.stringify(['proj_1']));
+    });
+    await page.reload();
+
+    await page.getByText('合併檢視').click();
+    await expect(page.getByText('合併範圍：')).toBeVisible();
+
+    // 點重新設定
+    await page.getByRole('button', { name: '重新設定' }).click();
+    await expect(page.getByText('選擇要合併的專案')).toBeVisible();
+
+    // 取消重新設定 → Modal 消失（切回上一個 tab，合併設定仍保留）
+    await page.getByRole('button', { name: '取消' }).click();
+    await expect(page.getByText('選擇要合併的專案')).not.toBeVisible();
+
+    // 再次點合併 tab，banner 仍應出現（設定未被清除）
+    await page.getByText('合併檢視').click();
+    await expect(page.getByText('合併範圍：')).toBeVisible();
+  });
+});

@@ -543,6 +543,16 @@ export default function BurnupChartApp() {
     }
   }, [activeProjectId]);
 
+  const validMergedIds = useMemo(
+    () => mergedProjectIds.filter(id => projects.some(p => p.id === id)),
+    [projects, mergedProjectIds]
+  );
+
+  const mergedTasks = useMemo(
+    () => projects.filter(p => validMergedIds.includes(p.id)).flatMap(p => p.tasks),
+    [projects, validMergedIds]
+  );
+
   // 清理已刪除的 stale mergedProjectIds；若全數清空且在合併 tab 則直接開 Modal
   useEffect(() => {
     if (validMergedIds.length !== mergedProjectIds.length) {
@@ -560,16 +570,6 @@ export default function BurnupChartApp() {
       setShowMergedModal(true);
     }
   }, [activeProjectId, mergedProjectIds.length]);
-
-  const validMergedIds = useMemo(
-    () => mergedProjectIds.filter(id => projects.some(p => p.id === id)),
-    [projects, mergedProjectIds]
-  );
-
-  const mergedTasks = useMemo(
-    () => projects.filter(p => validMergedIds.includes(p.id)).flatMap(p => p.tasks),
-    [projects, validMergedIds]
-  );
 
   const isReadOnly = activeProjectId === MERGED_TAB_ID;
 
