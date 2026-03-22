@@ -199,12 +199,9 @@ test.describe('合併檢視', () => {
     await page.getByRole('button', { name: '重新設定' }).click();
     await expect(page.getByText('選擇要合併的專案')).toBeVisible();
 
-    // 取消重新設定 → Modal 消失（切回上一個 tab，合併設定仍保留）
+    // 取消重新設定 → Modal 消失，仍留在合併檢視（banner 仍可見）
     await page.getByRole('button', { name: '取消' }).click();
     await expect(page.getByText('選擇要合併的專案')).not.toBeVisible();
-
-    // 再次點合併 tab，banner 仍應出現（設定未被清除）
-    await page.getByText('合併檢視').click();
     await expect(page.getByText('合併範圍：')).toBeVisible();
   });
 });

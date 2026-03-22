@@ -1465,8 +1465,12 @@ export default function BurnupChartApp() {
 
   const handleMergedModalCancel = () => {
     setShowMergedModal(false);
-    const fallback = previousProjectIdRef.current ?? projects[0]?.id;
-    if (fallback) setActiveProjectId(fallback);
+    // 若已有設定（重新設定的 Modal），取消後留在合併檢視；
+    // 若尚未設定（初始 Modal），取消後回到前一個專案
+    if (mergedProjectIds.length === 0) {
+      const fallback = previousProjectIdRef.current ?? projects[0]?.id;
+      if (fallback) setActiveProjectId(fallback);
+    }
   };
 
   const deleteProject = async (e, projId) => {
