@@ -156,6 +156,8 @@ const getDateRange = (startDateStr, endDateStr) => {
   return dates;
 };
 
+const MERGED_TAB_ID = '__merged__';
+
 // Default Initial Data with Multiple Projects
 const INITIAL_PROJECTS = [
   {
@@ -327,6 +329,18 @@ export default function BurnupChartApp() {
     endDate: '',
     usePercentage: true
   });
+
+  // Merged View State
+  const [mergedProjectIds, setMergedProjectIds] = useState(() => {
+    try {
+      const raw = localStorage.getItem('burnup_merged_project_ids');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showMergedModal, setShowMergedModal] = useState(false);
+  const previousProjectIdRef = useRef(null);
 
   // State for Logs Modal
   const [activeLogTaskId, setActiveLogTaskId] = useState(null);
