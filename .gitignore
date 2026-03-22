@@ -12,5 +12,6 @@ backend/data/*.sqlite3
 .pytest_cache
 __pycache__
 .superpowers
+.worktrees
 backend/poc/*
 .claude/
