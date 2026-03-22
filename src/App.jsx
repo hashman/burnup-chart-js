@@ -3,6 +3,11 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Upload, Download, Plus, Trash2, Calendar, User, Layout, Briefcase, AlertTriangle, CheckCircle2, Filter, Lock, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, Eye, EyeOff, Settings, Percent, MessageSquare, X, Send, Tag, Maximize2, Minimize2, Check, BarChart2, TrendingUp, Clock } from 'lucide-react';
 import Holidays from 'date-holidays';
 
+// --- Constants ---
+
+const MERGED_TAB_ID = '__merged__';
+const LS_MERGED_IDS_KEY = 'burnup_merged_project_ids';
+
 // --- Utility Functions ---
 
 const generateId = () => {
@@ -158,9 +163,6 @@ const getDateRange = (startDateStr, endDateStr) => {
   }
   return dates;
 };
-
-const MERGED_TAB_ID = '__merged__';
-const LS_MERGED_IDS_KEY = 'burnup_merged_project_ids';
 
 // Default Initial Data with Multiple Projects
 const INITIAL_PROJECTS = [
@@ -996,6 +998,7 @@ export default function BurnupChartApp() {
                           onMouseDown={isReadOnly ? undefined : (e) => handleBarMouseDown(e, task, 'plan', task.expectedStart, task.expectedEnd)}
                           onClick={(e) => {
                             e.stopPropagation();
+                            if (isReadOnly) return;
                             if (didDragRef.current) { didDragRef.current = false; return; }
                             setDetailTaskId(task.id);
                           }}
@@ -1020,6 +1023,7 @@ export default function BurnupChartApp() {
                           onMouseDown={isReadOnly ? undefined : (e) => handleBarMouseDown(e, task, 'actual', task.actualStart, task.actualEnd)}
                           onClick={(e) => {
                             e.stopPropagation();
+                            if (isReadOnly) return;
                             if (didDragRef.current) { didDragRef.current = false; return; }
                             setDetailTaskId(task.id);
                           }}
@@ -1065,6 +1069,7 @@ export default function BurnupChartApp() {
                       onMouseDown={isReadOnly ? undefined : (e) => handleBarMouseDown(e, task, 'plan', task.expectedStart, task.expectedEnd)}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (isReadOnly) return;
                         if (didDragRef.current) { didDragRef.current = false; return; }
                         setDetailTaskId(task.id);
                       }}
