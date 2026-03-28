@@ -1,4 +1,62 @@
 import { test, expect } from '@playwright/test';
+import { API_BASE } from './test-config.js';
+
+/** Create a project via API and return its id. */
+async function createProjectViaAPI(name) {
+  const res = await fetch(`${API_BASE}/projects`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error(`Seed project failed: ${res.status} ${await res.text()}`);
+  const data = await res.json();
+  return data.id;
+}
+
+/** Create a task under a project via API and return its id. */
+async function createTaskViaAPI(projectId, task) {
+  const res = await fetch(`${API_BASE}/projects/${projectId}/tasks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(task),
+  });
+  if (!res.ok) throw new Error(`Seed task failed: ${res.status} ${await res.text()}`);
+  const data = await res.json();
+  return data.id;
+}
+
+/** Delete all projects via API to reset DB state. */
+async function deleteAllProjects() {
+  const res = await fetch(`${API_BASE}/projects`);
+  if (!res.ok) return;
+  const projects = await res.json();
+  const results = await Promise.all(
+    projects.map((p) => fetch(`${API_BASE}/projects/${p.id}`, { method: 'DELETE' })),
+  );
+  const failed = results.filter((r) => !r.ok);
+  if (failed.length > 0) {
+    throw new Error(`Failed to delete ${failed.length} project(s) during cleanup`);
+  }
+}
+
+/** Enter merged view via UI: click tab → select projects → confirm. */
+async function enterMergedViewViaUI(page) {
+  await page.getByText('合併檢視').click();
+  await expect(page.getByText('選擇要合併的專案')).toBeVisible();
+  // Check all project checkboxes
+  const checkboxes = page.locator('input[type="checkbox"]');
+  const count = await checkboxes.count();
+  for (let i = 0; i < count; i++) {
+    await checkboxes.nth(i).check();
+  }
+  await page.getByRole('button', { name: '確認並檢視' }).click();
+  await expect(page.getByText('合併範圍：')).toBeVisible();
+}
+
+// Clean DB before each test so tests are fully isolated
+test.beforeEach(async () => {
+  await deleteAllProjects();
+});
 
 test.describe('Burnup Chart App 完整流程測試', () => {
   const getTaskRowByName = (page, taskName) =>
@@ -19,7 +77,7 @@ test.describe('Burnup Chart App 完整流程測試', () => {
       page.getByRole('heading', { name: 'Playwright Demo - 進度趨勢' })
     ).toBeVisible();
 
-    await page.getByRole('button', { name: '開啟新增面板' }).click();
+    // showAddTask defaults to true, so the add panel is already open
     await page.getByPlaceholder('例如：實作 API').fill('基底任務');
     await page.locator('input[type="number"]').first().fill('3');
     await page.getByPlaceholder('Name').fill('Alice');
@@ -48,7 +106,7 @@ test.describe('Burnup Chart App 完整流程測試', () => {
       page.getByRole('heading', { name: 'Overload Test - 進度趨勢' })
     ).toBeVisible();
 
-    await page.getByRole('button', { name: '開啟新增面板' }).click();
+    // showAddTask defaults to true, so the add panel is already open
 
     const addTask = async (taskName, person, startDate) => {
       await page.getByPlaceholder('例如：實作 API').fill(taskName);
@@ -78,6 +136,22 @@ test.describe('Burnup Chart App 完整流程測試', () => {
   });
 
   test('Scenario: 圖表互動與 Log 功能', async ({ page }) => {
+    // Seed a project with a task via API so the Log button exists
+    const projId = await createProjectViaAPI('Log Test Project');
+    await createTaskViaAPI(projId, {
+      name: 'Log 測試任務',
+      points: 3,
+      people: 'Bob',
+      expectedStart: '2024-03-01',
+    });
+
+    // Reload to pick up the seeded data
+    await page.reload();
+    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible();
+
+    // Switch to the seeded project tab
+    await page.getByText('Log Test Project').click();
+
     const logBtn = page.locator('button[title="紀錄"]').first();
     await logBtn.click();
 
@@ -97,7 +171,7 @@ test.describe('Burnup Chart App 完整流程測試', () => {
       .click();
     await expect(logModal).not.toBeVisible();
 
-    const fullscreenBtn = page.locator('button[title="全螢幕顯示 (適合簡報)"]');
+    const fullscreenBtn = page.locator('button[title="全螢幕顯示"]');
     await fullscreenBtn.click();
 
     const fullscreenPanel = page.locator('div.fixed.inset-0.bg-white.z-\\[100\\]');
@@ -110,15 +184,15 @@ test.describe('Burnup Chart App 完整流程測試', () => {
 
 test.describe('合併檢視', () => {
   test('Scenario: 首次進入合併 tab 應出現 Modal，確認後顯示 banner', async ({ page }) => {
-    // 清除 localStorage
+    // Seed a project so there's something to merge
+    await createProjectViaAPI('Merge Seed A');
+
     await page.goto('/');
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
     await page.reload();
 
-    // 點擊合併 tab
+    // 點擊合併 tab → Modal 出現
     await page.getByText('合併檢視').click();
-
-    // Modal 出現
     await expect(page.getByText('選擇要合併的專案')).toBeVisible();
 
     // 勾選第一個 checkbox（至少一個）
@@ -133,32 +207,34 @@ test.describe('合併檢視', () => {
   });
 
   test('Scenario: 再次進入合併 tab 不再出現 Modal（localStorage 已設定）', async ({ page }) => {
-    await page.goto('/');
+    await createProjectViaAPI('Merge Seed B');
 
-    // 先設定 localStorage
-    await page.evaluate(() => {
-      localStorage.setItem('burnup_merged_project_ids', JSON.stringify(['proj_1']));
-    });
+    await page.goto('/');
+    await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
     await page.reload();
 
-    // 點擊合併 tab
+    // Set up merged view through UI first
+    await enterMergedViewViaUI(page);
+
+    // Navigate away to the seeded project tab
+    await page.getByText('Merge Seed B').first().click();
+    await expect(page.getByText('合併範圍：')).not.toBeVisible();
+
+    // Re-enter merged tab — should NOT show modal
     await page.getByText('合併檢視').click();
-
-    // Modal 不出現
     await expect(page.getByText('選擇要合併的專案')).not.toBeVisible();
-
-    // banner 出現
     await expect(page.getByText('合併範圍：')).toBeVisible();
   });
 
   test('Scenario: 合併 tab 唯讀 — 無新增表單、無刪除按鈕', async ({ page }) => {
+    await createProjectViaAPI('Merge Seed C');
+
     await page.goto('/');
-    await page.evaluate(() => {
-      localStorage.setItem('burnup_merged_project_ids', JSON.stringify(['proj_1']));
-    });
+    await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
     await page.reload();
 
-    await page.getByText('合併檢視').click();
+    // Set up merged view through UI
+    await enterMergedViewViaUI(page);
 
     // 無新增任務表單的 submit 按鈕
     await expect(page.getByRole('button', { name: '加入任務' })).not.toBeVisible();
@@ -168,6 +244,7 @@ test.describe('合併檢視', () => {
   });
 
   test('Scenario: 取消 Modal 應切回上一個 tab', async ({ page }) => {
+    await createProjectViaAPI('Cancel Test');
     await page.goto('/');
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
     await page.reload();
@@ -179,21 +256,21 @@ test.describe('合併檢視', () => {
     // 取消
     await page.getByRole('button', { name: '取消' }).click();
 
-    // Modal 消失，合併 tab 不再是 active（active tab has border-indigo-500 or border-violet-500 class — check that '合併檢視' text does NOT have violet active styling)
+    // Modal 消失，合併 tab 不再是 active
     await expect(page.getByText('選擇要合併的專案')).not.toBeVisible();
     // Verify we're back on a regular project tab by checking banner is not visible
     await expect(page.getByText('合併範圍：')).not.toBeVisible();
   });
 
   test('Scenario: 重新設定可更改合併的專案', async ({ page }) => {
+    await createProjectViaAPI('Merge Seed D');
+
     await page.goto('/');
-    await page.evaluate(() => {
-      localStorage.setItem('burnup_merged_project_ids', JSON.stringify(['proj_1']));
-    });
+    await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
     await page.reload();
 
-    await page.getByText('合併檢視').click();
-    await expect(page.getByText('合併範圍：')).toBeVisible();
+    // Set up merged view through UI
+    await enterMergedViewViaUI(page);
 
     // 點重新設定
     await page.getByRole('button', { name: '重新設定' }).click();
