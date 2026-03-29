@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, Trash2 } from 'lucide-react';
 
-export default function TodoFormModal({ todo, statuses, allTasks, projects, allTags, onSave, onDelete, onClose }) {
+export default function TodoFormModal({ todo, statuses, allTasks, projects, allTags, allAssignees, onSave, onDelete, onClose }) {
   const isEdit = !!todo;
   const startStatus = statuses.find(s => s.isDefaultStart);
 
@@ -89,6 +89,8 @@ export default function TodoFormModal({ todo, statuses, allTasks, projects, allT
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none"
               placeholder="輸入待辦事項"
               autoFocus
+              data-1p-ignore
+              autoComplete="off"
             />
           </div>
 
@@ -129,6 +131,7 @@ export default function TodoFormModal({ todo, statuses, allTasks, projects, allT
                 value={form.dueDate}
                 onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none"
+                data-1p-ignore
               />
             </div>
             <div>
@@ -139,7 +142,13 @@ export default function TodoFormModal({ todo, statuses, allTasks, projects, allT
                 onChange={e => setForm(f => ({ ...f, assignee: e.target.value }))}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none"
                 placeholder="名稱"
+                list="assignee-suggestions"
+                data-1p-ignore
+                autoComplete="off"
               />
+              <datalist id="assignee-suggestions">
+                {(allAssignees || []).map(a => <option key={a} value={a} />)}
+              </datalist>
             </div>
           </div>
 
@@ -153,6 +162,8 @@ export default function TodoFormModal({ todo, statuses, allTasks, projects, allT
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none"
               placeholder="Frontend, Backend, ..."
               list="tag-suggestions"
+              data-1p-ignore
+              autoComplete="off"
             />
             <datalist id="tag-suggestions">
               {tagSuggestions.map(t => <option key={t} value={t} />)}
@@ -183,6 +194,7 @@ export default function TodoFormModal({ todo, statuses, allTasks, projects, allT
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none resize-none"
               rows={3}
               placeholder="備註..."
+              data-1p-ignore
             />
           </div>
 

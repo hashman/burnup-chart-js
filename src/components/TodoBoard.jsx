@@ -403,6 +403,7 @@ export default function TodoBoard({
           allTasks={allTasks}
           projects={projects}
           allTags={allTags}
+          allAssignees={allAssignees}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => { setShowFormModal(false); setEditingTodo(null); }}
