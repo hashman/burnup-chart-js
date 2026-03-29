@@ -1664,6 +1664,43 @@ export default function BurnupChartApp() {
     }
   };
 
+  const createTodoComment = async (todoId, content) => {
+    const tempId = `tc_${Date.now()}`;
+    const now = new Date().toISOString();
+    const tempComment = { id: tempId, todoId, content, createdAt: now, updatedAt: now };
+    setTodos(prev => prev.map(t => t.id === todoId ? { ...t, comments: [...(t.comments || []), tempComment] } : t));
+    if (apiAvailable) {
+      try {
+        const created = await requestJson(`/api/todos/${todoId}/comments`, {
+          method: "POST", body: JSON.stringify({ content }),
+        });
+        setTodos(prev => prev.map(t => t.id === todoId ? { ...t, comments: (t.comments || []).map(c => c.id === tempId ? created : c) } : t));
+      } catch { setApiAvailable(false); }
+    }
+  };
+
+  const updateTodoComment = async (todoId, commentId, content) => {
+    const now = new Date().toISOString();
+    setTodos(prev => prev.map(t => t.id === todoId ? { ...t, comments: (t.comments || []).map(c => c.id === commentId ? { ...c, content, updatedAt: now } : c) } : t));
+    if (apiAvailable) {
+      try {
+        const updated = await requestJson(`/api/todo-comments/${commentId}`, {
+          method: "PATCH", body: JSON.stringify({ content }),
+        });
+        setTodos(prev => prev.map(t => t.id === todoId ? { ...t, comments: (t.comments || []).map(c => c.id === commentId ? updated : c) } : t));
+      } catch { setApiAvailable(false); }
+    }
+  };
+
+  const deleteTodoComment = async (todoId, commentId) => {
+    setTodos(prev => prev.map(t => t.id === todoId ? { ...t, comments: (t.comments || []).filter(c => c.id !== commentId) } : t));
+    if (apiAvailable) {
+      try {
+        await requestJson(`/api/todo-comments/${commentId}`, { method: "DELETE" });
+      } catch { setApiAvailable(false); }
+    }
+  };
+
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file || !activeProjectId) return;
@@ -2267,6 +2304,9 @@ export default function BurnupChartApp() {
               onUpdateStatus={updateStatus}
               onDeleteStatus={deleteStatus}
               onReorderStatuses={reorderStatuses}
+              onCreateComment={createTodoComment}
+              onUpdateComment={updateTodoComment}
+              onDeleteComment={deleteTodoComment}
             />
           </div>
         </div>

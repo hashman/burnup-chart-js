@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Trash2 } from 'lucide-react';
+import { X, Trash2, Send, Pencil, Check } from 'lucide-react';
 
-export default function TodoFormModal({ todo, statuses, allTasks, projects, allTags, allAssignees, onSave, onDelete, onClose }) {
+export default function TodoFormModal({ todo, statuses, allTasks, projects, allTags, allAssignees, onSave, onDelete, onClose, onCreateComment, onUpdateComment, onDeleteComment }) {
   const isEdit = !!todo;
   const startStatus = statuses.find(s => s.isDefaultStart);
 
@@ -34,6 +34,24 @@ export default function TodoFormModal({ todo, statuses, allTasks, projects, allT
   }, [todo]);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [commentInput, setCommentInput] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editingCommentContent, setEditingCommentContent] = useState('');
+
+  const comments = (todo && todo.comments) || [];
+
+  const handleAddComment = () => {
+    if (!commentInput.trim() || !todo) return;
+    onCreateComment(todo.id, commentInput.trim());
+    setCommentInput('');
+  };
+
+  const handleSaveEditComment = (commentId) => {
+    if (!editingCommentContent.trim() || !todo) return;
+    onUpdateComment(todo.id, commentId, editingCommentContent.trim());
+    setEditingCommentId(null);
+    setEditingCommentContent('');
+  };
 
   const taskOptions = useMemo(() => {
     const options = [];
@@ -230,6 +248,73 @@ export default function TodoFormModal({ todo, statuses, allTasks, projects, allT
               data-1p-ignore
             />
           </div>
+
+          {/* Comments (edit mode only) */}
+          {isEdit && (
+            <div>
+              <label className="text-xs font-medium text-gray-600 block mb-1">留言紀錄</label>
+              <div className="border border-gray-300 rounded-lg overflow-hidden">
+                {comments.length > 0 && (
+                  <div className="max-h-40 overflow-y-auto divide-y divide-gray-100">
+                    {comments.map(c => (
+                      <div key={c.id} className="px-3 py-2 text-sm group hover:bg-gray-50">
+                        {editingCommentId === c.id ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="text"
+                              value={editingCommentContent}
+                              onChange={e => setEditingCommentContent(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') handleSaveEditComment(c.id); if (e.key === 'Escape') setEditingCommentId(null); }}
+                              className="flex-1 border border-indigo-300 rounded px-2 py-1 text-sm outline-none"
+                              autoFocus
+                              data-1p-ignore
+                              autoComplete="off"
+                            />
+                            <button type="button" onClick={() => handleSaveEditComment(c.id)} className="text-indigo-500 hover:text-indigo-700 p-1"><Check size={14} /></button>
+                            <button type="button" onClick={() => setEditingCommentId(null)} className="text-gray-400 hover:text-gray-600 p-1"><X size={14} /></button>
+                          </div>
+                        ) : (
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="text-gray-700">{c.content}</p>
+                              <span className="text-[10px] text-gray-400">
+                                {new Date(c.createdAt).toLocaleString('zh-TW')}
+                                {c.updatedAt !== c.createdAt && ' (已編輯)'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition shrink-0 ml-2">
+                              <button type="button" onClick={() => { setEditingCommentId(c.id); setEditingCommentContent(c.content); }} className="text-gray-400 hover:text-indigo-600 p-1"><Pencil size={12} /></button>
+                              <button type="button" onClick={() => onDeleteComment(todo.id, c.id)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={12} /></button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center gap-1 border-t border-gray-200 px-2 py-1.5">
+                  <input
+                    type="text"
+                    value={commentInput}
+                    onChange={e => setCommentInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddComment(); } }}
+                    className="flex-1 text-sm outline-none bg-transparent py-1"
+                    placeholder="輸入留言..."
+                    data-1p-ignore
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddComment}
+                    disabled={!commentInput.trim()}
+                    className="text-indigo-500 hover:text-indigo-700 disabled:text-gray-300 p-1"
+                  >
+                    <Send size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Buttons */}
           <div className="flex justify-between items-center pt-2">

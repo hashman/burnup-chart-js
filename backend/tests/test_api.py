@@ -623,3 +623,81 @@ def test_todo_not_found(client: TestClient) -> None:
 
     response = client.delete("/api/todos/nonexistent")
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Todo Comment Tests
+# ---------------------------------------------------------------------------
+
+
+def test_todo_comments_included_in_todo(client: TestClient) -> None:
+    """Todos include a comments array."""
+    todo = create_todo(client, "Has comments field")
+    assert "comments" in todo
+    assert todo["comments"] == []
+
+
+def test_todo_comment_crud(client: TestClient) -> None:
+    """Create, list (via todo), update, and delete a comment."""
+    todo = create_todo(client, "Commentable")
+
+    # Create comment
+    resp = client.post(f"/api/todos/{todo['id']}/comments", json={"content": "First note"})
+    assert resp.status_code == 201
+    comment = resp.json()
+    assert comment["content"] == "First note"
+    assert comment["todoId"] == todo["id"]
+    assert comment["createdAt"] == comment["updatedAt"]
+
+    # Comment appears when listing todos
+    todos = client.get("/api/todos").json()
+    found = [t for t in todos if t["id"] == todo["id"]][0]
+    assert len(found["comments"]) == 1
+    assert found["comments"][0]["id"] == comment["id"]
+
+    # Update comment
+    resp = client.patch(f"/api/todo-comments/{comment['id']}", json={"content": "Updated note"})
+    assert resp.status_code == 200
+    updated = resp.json()
+    assert updated["content"] == "Updated note"
+    assert updated["updatedAt"] != updated["createdAt"]
+
+    # Delete comment
+    resp = client.delete(f"/api/todo-comments/{comment['id']}")
+    assert resp.status_code == 204
+
+    # Confirm gone
+    todos = client.get("/api/todos").json()
+    found = [t for t in todos if t["id"] == todo["id"]][0]
+    assert len(found["comments"]) == 0
+
+
+def test_todo_comment_on_nonexistent_todo(client: TestClient) -> None:
+    """Creating a comment on a non-existent todo returns 404."""
+    resp = client.post("/api/todos/nonexistent/comments", json={"content": "Nope"})
+    assert resp.status_code == 404
+
+
+def test_todo_comment_not_found(client: TestClient) -> None:
+    """Updating/deleting a non-existent comment returns 404."""
+    resp = client.patch("/api/todo-comments/nonexistent", json={"content": "X"})
+    assert resp.status_code == 404
+
+    resp = client.delete("/api/todo-comments/nonexistent")
+    assert resp.status_code == 404
+
+
+def test_todo_comments_cascade_on_delete(client: TestClient) -> None:
+    """Comments are deleted when their parent todo is deleted."""
+    todo = create_todo(client, "Will be deleted")
+    client.post(f"/api/todos/{todo['id']}/comments", json={"content": "Orphan?"})
+
+    # Delete todo
+    resp = client.delete(f"/api/todos/{todo['id']}")
+    assert resp.status_code == 204
+
+    # Comment should be gone (no orphans in list)
+    todos = client.get("/api/todos").json()
+    for t in todos:
+        for c in t.get("comments", []):
+            assert c["todoId"] != todo["id"]

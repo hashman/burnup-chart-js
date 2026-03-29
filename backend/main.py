@@ -269,6 +269,22 @@ class TodoUpdate(BaseModel):
     sortOrder: Optional[float] = None
 
 
+class TodoCommentCreate(BaseModel):
+    content: str
+
+
+class TodoCommentUpdate(BaseModel):
+    content: str
+
+
+class TodoCommentOut(BaseModel):
+    id: str
+    todoId: str
+    content: str
+    createdAt: str
+    updatedAt: str
+
+
 class TodoOut(BaseModel):
     id: str
     title: str
@@ -281,6 +297,7 @@ class TodoOut(BaseModel):
     linkedTaskId: Optional[str] = None
     createdAt: str
     sortOrder: float
+    comments: List[TodoCommentOut] = Field(default_factory=list)
 
 
 @app.on_event("startup")
@@ -428,7 +445,17 @@ def row_to_status(row: sqlite3.Row) -> Dict[str, Any]:
     }
 
 
-def row_to_todo(row: sqlite3.Row) -> Dict[str, Any]:
+def row_to_todo_comment(row: sqlite3.Row) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "todoId": row["todo_id"],
+        "content": row["content"],
+        "createdAt": row["created_at"],
+        "updatedAt": row["updated_at"],
+    }
+
+
+def row_to_todo(row: sqlite3.Row, comments: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
     return {
         "id": row["id"],
         "title": row["title"],
@@ -441,6 +468,7 @@ def row_to_todo(row: sqlite3.Row) -> Dict[str, Any]:
         "linkedTaskId": normalize_text(row["linked_task_id"]) or None,
         "createdAt": row["created_at"],
         "sortOrder": row["sort_order"],
+        "comments": comments or [],
     }
 
 
@@ -996,6 +1024,21 @@ def reorder_statuses(items: List[StatusReorderItem]) -> List[Dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
+def _fetch_todo_comments(conn: sqlite3.Connection, todo_ids: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+    """Fetch comments for a list of todo IDs, grouped by todo_id."""
+    if not todo_ids:
+        return {}
+    placeholders = ",".join("?" * len(todo_ids))
+    rows = conn.execute(
+        f"SELECT * FROM todo_comments WHERE todo_id IN ({placeholders}) ORDER BY created_at",
+        todo_ids,
+    ).fetchall()
+    result: Dict[str, List[Dict[str, Any]]] = {}
+    for row in rows:
+        result.setdefault(row["todo_id"], []).append(row_to_todo_comment(row))
+    return result
+
+
 @app.get("/api/todos", response_model=List[TodoOut])
 def list_todos() -> List[Dict[str, Any]]:
     """Return all todos ordered by sort_order, created_at."""
@@ -1003,7 +1046,9 @@ def list_todos() -> List[Dict[str, Any]]:
         rows = conn.execute(
             "SELECT * FROM todos ORDER BY sort_order, created_at"
         ).fetchall()
-    return [row_to_todo(row) for row in rows]
+        todo_ids = [r["id"] for r in rows]
+        comments_map = _fetch_todo_comments(conn, todo_ids)
+    return [row_to_todo(row, comments_map.get(row["id"], [])) for row in rows]
 
 
 @app.post("/api/todos", response_model=TodoOut, status_code=status.HTTP_201_CREATED)
@@ -1048,7 +1093,7 @@ def create_todo(payload: TodoCreate) -> Dict[str, Any]:
         )
         conn.commit()
         row = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
-    return row_to_todo(row)
+    return row_to_todo(row, [])
 
 
 @app.patch("/api/todos/{todo_id}", response_model=TodoOut)
@@ -1105,7 +1150,10 @@ def update_todo(todo_id: str, payload: TodoUpdate) -> Dict[str, Any]:
             conn.commit()
 
         row = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
-    return row_to_todo(row)
+        comments = conn.execute(
+            "SELECT * FROM todo_comments WHERE todo_id = ? ORDER BY created_at", (todo_id,)
+        ).fetchall()
+    return row_to_todo(row, [row_to_todo_comment(c) for c in comments])
 
 
 @app.delete("/api/todos/{todo_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1127,7 +1175,63 @@ def list_task_todos(task_id: str) -> List[Dict[str, Any]]:
             "SELECT * FROM todos WHERE linked_task_id = ? ORDER BY sort_order, created_at",
             (task_id,),
         ).fetchall()
-    return [row_to_todo(row) for row in rows]
+        todo_ids = [r["id"] for r in rows]
+        comments_map = _fetch_todo_comments(conn, todo_ids)
+    return [row_to_todo(row, comments_map.get(row["id"], [])) for row in rows]
+
+
+# ---------------------------------------------------------------------------
+# Todo Comment CRUD endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post(
+    "/api/todos/{todo_id}/comments",
+    response_model=TodoCommentOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_todo_comment(todo_id: str, payload: TodoCommentCreate) -> Dict[str, Any]:
+    """Create a comment on a todo."""
+    comment_id = f"tc_{uuid4().hex}"
+    now = utc_now()
+    with get_connection() as conn:
+        todo_row = conn.execute("SELECT 1 FROM todos WHERE id = ?", (todo_id,)).fetchone()
+        if not todo_row:
+            raise HTTPException(status_code=404, detail="Todo not found")
+        conn.execute(
+            "INSERT INTO todo_comments (id, todo_id, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            (comment_id, todo_id, payload.content, now, now),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM todo_comments WHERE id = ?", (comment_id,)).fetchone()
+    return row_to_todo_comment(row)
+
+
+@app.patch("/api/todo-comments/{comment_id}", response_model=TodoCommentOut)
+def update_todo_comment(comment_id: str, payload: TodoCommentUpdate) -> Dict[str, Any]:
+    """Update a todo comment."""
+    now = utc_now()
+    with get_connection() as conn:
+        existing = conn.execute("SELECT 1 FROM todo_comments WHERE id = ?", (comment_id,)).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Comment not found")
+        conn.execute(
+            "UPDATE todo_comments SET content = ?, updated_at = ? WHERE id = ?",
+            (payload.content, now, comment_id),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM todo_comments WHERE id = ?", (comment_id,)).fetchone()
+    return row_to_todo_comment(row)
+
+
+@app.delete("/api/todo-comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_todo_comment(comment_id: str) -> None:
+    """Delete a todo comment."""
+    with get_connection() as conn:
+        result = conn.execute("DELETE FROM todo_comments WHERE id = ?", (comment_id,))
+        conn.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Comment not found")
 
 
 if __name__ == "__main__":

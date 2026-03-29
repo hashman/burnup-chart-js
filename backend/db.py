@@ -94,6 +94,14 @@ def init_db() -> None:
                 FOREIGN KEY (linked_task_id) REFERENCES tasks(id) ON DELETE SET NULL,
                 FOREIGN KEY (status) REFERENCES statuses(id)
             );
+            CREATE TABLE IF NOT EXISTS todo_comments (
+                id TEXT PRIMARY KEY,
+                todo_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE
+            );
             """
         )
         # Seed default statuses if table is empty

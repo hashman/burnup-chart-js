@@ -7,6 +7,7 @@ export default function TodoBoard({
   todos, statuses, allTasks, projects,
   onCreateTodo, onUpdateTodo, onDeleteTodo,
   onCreateStatus, onUpdateStatus, onDeleteStatus, onReorderStatuses,
+  onCreateComment, onUpdateComment, onDeleteComment,
 }) {
   const [editingTodo, setEditingTodo] = useState(null);
   const [showFormModal, setShowFormModal] = useState(false);
@@ -439,6 +440,9 @@ export default function TodoBoard({
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => { setShowFormModal(false); setEditingTodo(null); }}
+          onCreateComment={onCreateComment}
+          onUpdateComment={onUpdateComment}
+          onDeleteComment={onDeleteComment}
         />
       )}
     </div>
