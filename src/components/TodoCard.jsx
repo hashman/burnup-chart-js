@@ -16,6 +16,8 @@ export default function TodoCard({ todo, isDone, onEdit, onDragStart, onDragEnd,
     ? allTasks.find(t => t.id === todo.linkedTaskId)
     : null;
 
+  const isOverdue = !isDone && todo.dueDate && todo.dueDate < new Date().toISOString().slice(0, 10);
+
   return (
     <div
       draggable
@@ -64,7 +66,7 @@ export default function TodoCard({ todo, isDone, onEdit, onDragStart, onDragEnd,
           )}
         </div>
         {todo.dueDate && (
-          <span className="flex items-center gap-0.5">
+          <span className={`flex items-center gap-0.5 ${isOverdue ? 'text-red-500 font-semibold' : ''}`}>
             <Calendar size={11} />
             {todo.dueDate.slice(5).replace('-', '/')}
           </span>
