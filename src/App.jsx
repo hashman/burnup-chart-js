@@ -1,13 +1,15 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, ComposedChart, ReferenceLine, ReferenceDot, Label } from 'recharts';
-import { Upload, Download, Plus, Trash2, Calendar, User, Layout, Briefcase, AlertTriangle, CheckCircle2, Filter, Lock, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, Eye, EyeOff, Settings, Percent, MessageSquare, X, Send, Tag, Maximize2, Minimize2, Check, BarChart2, TrendingUp, Clock } from 'lucide-react';
+import { Upload, Download, Plus, Trash2, Calendar, User, Layout, Briefcase, AlertTriangle, CheckCircle2, Filter, Lock, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, Eye, EyeOff, Settings, Percent, MessageSquare, X, Send, Tag, Maximize2, Minimize2, Check, BarChart2, TrendingUp, Clock, ListTodo } from 'lucide-react';
 import Holidays from 'date-holidays';
+import TodoBoard from './components/TodoBoard';
+import TodoSection from './components/TodoSection';
 
 // --- Utility Functions ---
 
 const generateId = () => {
   const id = Date.now() + Math.random().toString(36).substr(2, 9);
-  return id === MERGED_TAB_ID ? Date.now() + Math.random().toString(36).substr(2, 9) : id;
+  return (id === MERGED_TAB_ID || id === TODO_TAB_ID) ? Date.now() + Math.random().toString(36).substr(2, 9) : id;
 };
 
 const normalizeDateString = (value) => {
@@ -160,6 +162,7 @@ const getDateRange = (startDateStr, endDateStr) => {
 };
 
 const MERGED_TAB_ID = '__merged__';
+const TODO_TAB_ID = '__todo__';
 const LS_MERGED_IDS_KEY = 'burnup_merged_project_ids';
 
 // Default Initial Data with Multiple Projects
@@ -402,6 +405,10 @@ export default function BurnupChartApp() {
   const [newLogContent, setNewLogContent] = useState("");
   const [newLogDate, setNewLogDate] = useState(new Date().toISOString().split('T')[0]);
 
+  // Todo & Status State
+  const [todos, setTodos] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+
   const { getExpectedEndDate, getExpectedPoints, loading: holidayLoading } = useTaiwanCalendar();
 
   const [newTask, setNewTask] = useState({
@@ -438,6 +445,14 @@ export default function BurnupChartApp() {
           setActiveProjectId(created.id);
           setApiAvailable(true);
         }
+        try {
+          const statusData = await requestJson("/api/statuses");
+          if (isActive) setStatuses(Array.isArray(statusData) ? statusData : []);
+        } catch {}
+        try {
+          const todoData = await requestJson("/api/todos");
+          if (isActive) setTodos(Array.isArray(todoData) ? todoData : []);
+        } catch {}
       } catch (err) {
         if (!isActive) return;
         setApiAvailable(false);
@@ -531,7 +546,7 @@ export default function BurnupChartApp() {
 
   // 追蹤前一個非 merged 的 activeProjectId，供 Modal 取消時還原
   useEffect(() => {
-    if (activeProjectId !== MERGED_TAB_ID) {
+    if (activeProjectId !== MERGED_TAB_ID && activeProjectId !== TODO_TAB_ID) {
       previousProjectIdRef.current = activeProjectId;
     }
   }, [activeProjectId]);
@@ -571,7 +586,7 @@ export default function BurnupChartApp() {
     }
   }, [activeProjectId, mergedProjectIds.length]);
 
-  const isReadOnly = activeProjectId === MERGED_TAB_ID;
+  const isReadOnly = activeProjectId === MERGED_TAB_ID || activeProjectId === TODO_TAB_ID;
 
   const activeProject = useMemo(() =>
     activeProjectId === MERGED_TAB_ID
@@ -625,6 +640,8 @@ export default function BurnupChartApp() {
   const activeDetailTask = useMemo(() =>
     allTasks.find(t => t.id === detailTaskId),
   [allTasks, detailTaskId]);
+
+  const allTasksFlat = useMemo(() => projects.flatMap(p => p.tasks), [projects]);
 
   const normalizedTasks = useMemo(() => allTasks.map(task => ({
     ...task,
@@ -1494,6 +1511,118 @@ export default function BurnupChartApp() {
     }
   };
 
+  // --- Status CRUD ---
+  const createStatus = async (data) => {
+    const tempId = `status_${Date.now()}`;
+    const newStatus = { id: tempId, sortOrder: statuses.length, isDefaultStart: false, isDefaultEnd: false, ...data };
+    setStatuses(prev => [...prev, newStatus]);
+    if (apiAvailable) {
+      try {
+        const result = await requestJson('/api/statuses', { method: 'POST', body: JSON.stringify({ name: data.name, sort_order: data.sortOrder }) });
+        setStatuses(prev => prev.map(s => s.id === tempId ? result : s));
+        return result;
+      } catch { setApiAvailable(false); }
+    }
+    return newStatus;
+  };
+
+  const updateStatus = async (id, data) => {
+    setStatuses(prev => prev.map(s => {
+      if (s.id === id) return { ...s, ...data };
+      if (data.isDefaultStart && s.isDefaultStart) return { ...s, isDefaultStart: false };
+      if (data.isDefaultEnd && s.isDefaultEnd) return { ...s, isDefaultEnd: false };
+      return s;
+    }));
+    if (apiAvailable) {
+      try {
+        const body = {};
+        if (data.name !== undefined) body.name = data.name;
+        if (data.sortOrder !== undefined) body.sort_order = data.sortOrder;
+        if (data.isDefaultStart !== undefined) body.is_default_start = data.isDefaultStart;
+        if (data.isDefaultEnd !== undefined) body.is_default_end = data.isDefaultEnd;
+        await requestJson(`/api/statuses/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+        const all = await requestJson('/api/statuses');
+        setStatuses(all);
+      } catch { setApiAvailable(false); }
+    }
+  };
+
+  const deleteStatus = async (id, migrateTo) => {
+    setStatuses(prev => prev.filter(s => s.id !== id));
+    if (migrateTo) {
+      setTodos(prev => prev.map(t => t.status === id ? { ...t, status: migrateTo } : t));
+    }
+    if (apiAvailable) {
+      try {
+        const url = migrateTo ? `/api/statuses/${id}?migrate_to=${migrateTo}` : `/api/statuses/${id}`;
+        await requestJson(url, { method: 'DELETE' });
+      } catch { setApiAvailable(false); }
+    }
+  };
+
+  const reorderStatuses = async (items) => {
+    const reordered = items.map((item, i) => ({ ...item, sortOrder: i }));
+    setStatuses(reordered);
+    if (apiAvailable) {
+      try {
+        const body = reordered.map(s => ({ id: s.id, sortOrder: s.sortOrder }));
+        const result = await requestJson('/api/statuses/reorder', { method: 'POST', body: JSON.stringify(body) });
+        setStatuses(result);
+      } catch { setApiAvailable(false); }
+    }
+  };
+
+  // --- Todo CRUD ---
+  const createTodo = async (data) => {
+    const id = `todo_${Date.now()}${Math.random().toString(36).substr(2, 5)}`;
+    const startStatus = statuses.find(s => s.isDefaultStart);
+    const newTodo = {
+      id,
+      title: data.title,
+      status: data.status || (startStatus ? startStatus.id : ''),
+      priority: data.priority || 'medium',
+      dueDate: data.dueDate || null,
+      assignee: data.assignee || null,
+      tags: data.tags || [],
+      note: data.note || null,
+      linkedTaskId: data.linkedTaskId || null,
+      createdAt: new Date().toISOString(),
+      sortOrder: 0,
+    };
+    setTodos(prev => [...prev, newTodo]);
+    if (apiAvailable) {
+      try {
+        const created = await requestJson("/api/todos", {
+          method: "POST",
+          body: JSON.stringify(data),
+        });
+        setTodos(prev => prev.map(t => t.id === id ? created : t));
+      } catch { setApiAvailable(false); }
+    }
+  };
+
+  const updateTodo = async (todoId, patch) => {
+    setTodos(prev => prev.map(t => t.id === todoId ? { ...t, ...patch } : t));
+    if (apiAvailable) {
+      try {
+        const updated = await requestJson(`/api/todos/${todoId}`, {
+          method: "PATCH",
+          body: JSON.stringify(patch),
+        });
+        setTodos(prev => prev.map(t => t.id === todoId ? updated : t));
+      } catch { setApiAvailable(false); }
+    }
+  };
+
+  const deleteTodo = async (todoId) => {
+    setTodos(prev => prev.filter(t => t.id !== todoId));
+    if (apiAvailable) {
+      try {
+        await requestJson(`/api/todos/${todoId}`, { method: "DELETE" });
+      } catch { setApiAvailable(false); }
+    }
+  };
+
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file || !activeProjectId) return;
@@ -1888,6 +2017,14 @@ export default function BurnupChartApp() {
                 </div>
               </div>
 
+              {/* Todo Section */}
+              <TodoSection
+                todos={todos.filter(t => t.linkedTaskId === activeDetailTask.id)}
+                statuses={statuses}
+                onToggleTodo={(todoId, newStatus) => updateTodo(todoId, { status: newStatus })}
+                onNavigateToTodoTab={() => { setDetailTaskId(null); setActiveProjectId(TODO_TAB_ID); }}
+              />
+
               {/* Logs Section */}
               <div className="space-y-4">
                 <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
@@ -2018,6 +2155,23 @@ export default function BurnupChartApp() {
               合併檢視
             </div>
 
+            {/* Divider before todo tab */}
+            <div className="w-px h-5 bg-gray-200 self-center mx-1" />
+
+            {/* Todo Tab */}
+            <div
+              onClick={() => setActiveProjectId(TODO_TAB_ID)}
+              className={`
+                flex items-center gap-1.5 px-4 py-3 border-b-2 cursor-pointer whitespace-nowrap text-sm font-medium transition-colors
+                ${activeProjectId === TODO_TAB_ID
+                  ? 'border-amber-500 text-amber-600 bg-amber-50/60 rounded-t-lg'
+                  : 'border-dashed border-amber-300 text-amber-400 hover:text-amber-600 hover:border-amber-400'}
+              `}
+            >
+              <ListTodo size={14} />
+              Todo
+            </div>
+
             {isCreatingProject ? (
               <div className="flex items-center gap-1 px-2 py-2 border-b-2 border-transparent">
                 <input
@@ -2047,6 +2201,27 @@ export default function BurnupChartApp() {
         </div>
       </div>
 
+      {/* Main Content Area */}
+      {activeProjectId === TODO_TAB_ID ? (
+        <div className="max-w-[95%] mx-auto mt-6 space-y-6">
+          <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
+            <TodoBoard
+              todos={todos}
+              statuses={statuses}
+              allTasks={allTasksFlat}
+              projects={projects}
+              onCreateTodo={createTodo}
+              onUpdateTodo={updateTodo}
+              onDeleteTodo={deleteTodo}
+              onCreateStatus={createStatus}
+              onUpdateStatus={updateStatus}
+              onDeleteStatus={deleteStatus}
+              onReorderStatuses={reorderStatuses}
+            />
+          </div>
+        </div>
+      ) : (
+      <>
       {/* ... Rest of the component (Chart Section, Task Management Grid) remains the same ... */}
       <div className="max-w-[95%] mx-auto mt-6 space-y-6">
 
@@ -2502,6 +2677,8 @@ export default function BurnupChartApp() {
         </div>
 
       </div>
+      </>
+      )}
     </div>
   );
 }
