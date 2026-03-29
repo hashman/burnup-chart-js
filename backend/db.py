@@ -117,3 +117,8 @@ def init_db() -> None:
                 "INSERT INTO statuses (id, name, sort_order, is_default_start, is_default_end) VALUES (?, ?, ?, ?, ?)",
                 default_statuses,
             )
+
+        # Migrations for existing databases
+        task_columns = {row[1] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
+        if "progress" not in task_columns:
+            conn.execute("ALTER TABLE tasks ADD COLUMN progress INTEGER NOT NULL DEFAULT 0")
