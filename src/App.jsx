@@ -750,7 +750,7 @@ export default function BurnupChartApp() {
         expectedPct = total === 0 ? 100 : Math.round((elapsed / total) * 100);
       }
     }
-    let actualPct = (task.actualStart && task.actualEnd) ? 100 : 0;
+    const actualPct = task.progress ?? 0;
     return { expectedPct, actualPct };
   };
 
@@ -2083,18 +2083,28 @@ export default function BurnupChartApp() {
                         {(() => {
                           const tp = todoProgressByTask[activeDetailTask.id];
                           const pct = tp ? Math.round((tp.done / tp.total) * 100) : stats.actualPct;
-                          const label = tp ? `Todo 進度 (${tp.done}/${tp.total})` : '實際完成 (Actual)';
-                          const barColor = pct === 100 ? 'bg-emerald-500' : tp ? 'bg-amber-400' : 'bg-gray-300';
-                          const textColor = pct === 100 ? 'text-emerald-600' : tp ? 'text-amber-500' : 'text-gray-500';
+                          const label = tp ? `Todo 進度 (${tp.done}/${tp.total})` : '完成進度';
+                          const barColor = pct === 100 ? 'bg-emerald-500' : tp ? 'bg-amber-400' : 'bg-indigo-400';
+                          const textColor = pct === 100 ? 'text-emerald-600' : tp ? 'text-amber-500' : 'text-indigo-500';
                           return (
                             <div className="space-y-1">
                               <div className="flex justify-between text-xs text-gray-500 mb-1">
                                 <span>{label}</span>
                                 <span className={`font-mono ${textColor}`}>{pct}%</span>
                               </div>
-                              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                                <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
-                              </div>
+                              {tp ? (
+                                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                  <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+                                </div>
+                              ) : (
+                                <input
+                                  type="range"
+                                  min="0" max="100" step="5"
+                                  value={activeDetailTask.progress ?? 0}
+                                  onChange={(e) => updateTask(activeDetailTask.id, 'progress', parseInt(e.target.value))}
+                                  className="w-full h-2 accent-indigo-500 cursor-pointer"
+                                />
+                              )}
                             </div>
                           );
                         })()}
@@ -2678,14 +2688,27 @@ export default function BurnupChartApp() {
                                 {(() => {
                                   const tp = todoProgressByTask[task.id];
                                   const pct = tp ? Math.round((tp.done / tp.total) * 100) : actualPct;
-                                  const label = tp ? `Todo 進度 (${tp.done}/${tp.total})` : '完成度 (Actual)';
-                                  const barColor = pct === 100 ? 'bg-emerald-500' : tp ? 'bg-amber-400' : 'bg-gray-300';
-                                  const textColor = pct === 100 ? 'text-emerald-600 font-bold' : tp ? 'text-amber-500' : 'text-gray-400';
+                                  const label = tp ? `Todo 進度 (${tp.done}/${tp.total})` : `完成度 ${pct}%`;
+                                  const barColor = pct === 100 ? 'bg-emerald-500' : tp ? 'bg-amber-400' : 'bg-indigo-400';
+                                  const textColor = pct === 100 ? 'text-emerald-600 font-bold' : tp ? 'text-amber-500' : 'text-indigo-500';
                                   return (
                                     <div className="flex items-center gap-1" title={label}>
-                                      <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden flex-1">
-                                        <div className={`h-full ${barColor}`} style={{ width: `${pct}%` }} />
-                                      </div>
+                                      {tp ? (
+                                        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden flex-1">
+                                          <div className={`h-full ${barColor}`} style={{ width: `${pct}%` }} />
+                                        </div>
+                                      ) : (
+                                        <input
+                                          type="range"
+                                          min="0"
+                                          max="100"
+                                          step="5"
+                                          value={task.progress ?? 0}
+                                          disabled={isReadOnly}
+                                          onChange={(e) => { if (!isReadOnly) updateTask(task.id, 'progress', parseInt(e.target.value)); }}
+                                          className="w-full h-1.5 flex-1 accent-indigo-500 cursor-pointer disabled:cursor-default"
+                                        />
+                                      )}
                                       <span className={`text-[10px] font-mono w-6 text-right ${textColor}`}>{pct}%</span>
                                     </div>
                                   );

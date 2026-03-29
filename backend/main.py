@@ -106,6 +106,7 @@ class TaskCreate(BaseModel):
     actualStart: str = ""
     actualEnd: str = ""
     showLabel: bool = False
+    progress: int = Field(default=0, ge=0, le=100)
 
 
 class TaskUpdate(BaseModel):
@@ -135,6 +136,7 @@ class TaskUpdate(BaseModel):
     actualStart: Optional[str] = None
     actualEnd: Optional[str] = None
     showLabel: Optional[bool] = None
+    progress: Optional[int] = Field(default=None, ge=0, le=100)
 
 
 class TaskOut(BaseModel):
@@ -167,6 +169,7 @@ class TaskOut(BaseModel):
     actualStart: str = ""
     actualEnd: str = ""
     showLabel: bool = False
+    progress: int = 0
     logs: List[LogOut] = Field(default_factory=list)
 
 
@@ -373,6 +376,7 @@ def row_to_task(row: sqlite3.Row, logs: List[LogPayload]) -> TaskPayload:
         "actualStart": normalize_text(row["actual_start"]),
         "actualEnd": normalize_text(row["actual_end"]),
         "showLabel": bool(row["show_label"]),
+        "progress": row["progress"],
         "logs": logs,
     }
 
@@ -667,9 +671,9 @@ def create_task(project_id: str, payload: TaskCreate) -> TaskPayload:
             """
             INSERT INTO tasks (
                 id, project_id, name, points, people, added_date, expected_start,
-                expected_end, actual_start, actual_end, show_label, created_at
+                expected_end, actual_start, actual_end, show_label, progress, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task_id,
@@ -683,8 +687,9 @@ def create_task(project_id: str, payload: TaskCreate) -> TaskPayload:
                 payload.actualStart,
                 payload.actualEnd,
                 1 if payload.showLabel else 0,
+                payload.progress,
                 now,
-            ),
+            )
         )
         conn.commit()
         task = fetch_task(conn, task_id)
@@ -736,6 +741,9 @@ def update_task(task_id: str, payload: TaskUpdate) -> TaskPayload:
     if payload.showLabel is not None:
         fields.append("show_label = ?")
         values.append(1 if payload.showLabel else 0)
+    if payload.progress is not None:
+        fields.append("progress = ?")
+        values.append(payload.progress)
 
     with get_connection() as conn:
         existing = conn.execute(

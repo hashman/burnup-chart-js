@@ -205,6 +205,29 @@ def test_task_crud_flow(client: TestClient) -> None:
     assert project_response.json()["tasks"] == []
 
 
+def test_task_progress_field(client: TestClient) -> None:
+    """Task has a progress field that can be set and updated (0-100)."""
+    project = create_project(client, name="Progress Project")
+    task = create_task(client, project["id"], "Progress Task")
+
+    # Default progress is 0
+    assert task["progress"] == 0
+
+    # Update progress
+    resp = client.patch(f"/api/tasks/{task['id']}", json={"progress": 75})
+    assert resp.status_code == 200
+    assert resp.json()["progress"] == 75
+
+    # Verify via project fetch
+    proj = client.get(f"/api/projects/{project['id']}").json()
+    assert proj["tasks"][0]["progress"] == 75
+
+    # Boundary: 100
+    resp = client.patch(f"/api/tasks/{task['id']}", json={"progress": 100})
+    assert resp.status_code == 200
+    assert resp.json()["progress"] == 100
+
+
 def test_log_crud_flow(client: TestClient) -> None:
     """Verify create and delete flow for logs.
 

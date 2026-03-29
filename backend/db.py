@@ -61,6 +61,7 @@ def init_db() -> None:
                 actual_start TEXT,
                 actual_end TEXT,
                 show_label INTEGER NOT NULL DEFAULT 0,
+                progress INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
             );
