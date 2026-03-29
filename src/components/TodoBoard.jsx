@@ -9,7 +9,7 @@ export default function TodoBoard({
   onCreateStatus, onUpdateStatus, onDeleteStatus, onReorderStatuses,
   onCreateComment, onUpdateComment, onDeleteComment,
 }) {
-  const [editingTodo, setEditingTodo] = useState(null);
+  const [editingTodoId, setEditingTodoId] = useState(null);
   const [showFormModal, setShowFormModal] = useState(false);
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverColumn, setDragOverColumn] = useState(null);
@@ -38,6 +38,8 @@ export default function TodoBoard({
   const [editingColumnName, setEditingColumnName] = useState('');
   const [draggingColumnId, setDraggingColumnId] = useState(null);
   const [dragOverColumnId, setDragOverColumnId] = useState(null);
+
+  const editingTodo = useMemo(() => editingTodoId ? todos.find(t => t.id === editingTodoId) || null : null, [editingTodoId, todos]);
 
   const allTags = useMemo(() => {
     const tagSet = new Set();
@@ -189,12 +191,12 @@ export default function TodoBoard({
 
   // --- Modal handlers ---
   const openCreate = () => {
-    setEditingTodo(null);
+    setEditingTodoId(null);
     setShowFormModal(true);
   };
 
   const openEdit = (todo) => {
-    setEditingTodo(todo);
+    setEditingTodoId(todo.id);
     setShowFormModal(true);
   };
 
@@ -205,13 +207,13 @@ export default function TodoBoard({
       onCreateTodo(data);
     }
     setShowFormModal(false);
-    setEditingTodo(null);
+    setEditingTodoId(null);
   };
 
   const handleDelete = (id) => {
     onDeleteTodo(id);
     setShowFormModal(false);
-    setEditingTodo(null);
+    setEditingTodoId(null);
   };
 
   const hasActiveFilters = filterAssignees.size > 0 || filterPriorities.size > 0 || filterTags.size > 0;
@@ -439,7 +441,7 @@ export default function TodoBoard({
           allAssignees={allAssignees}
           onSave={handleSave}
           onDelete={handleDelete}
-          onClose={() => { setShowFormModal(false); setEditingTodo(null); }}
+          onClose={() => { setShowFormModal(false); setEditingTodoId(null); }}
           onCreateComment={onCreateComment}
           onUpdateComment={onUpdateComment}
           onDeleteComment={onDeleteComment}

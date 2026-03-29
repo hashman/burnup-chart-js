@@ -259,19 +259,20 @@ export default function TodoFormModal({ todo, statuses, allTasks, projects, allT
                     {comments.map(c => (
                       <div key={c.id} className="px-3 py-2 text-sm group hover:bg-gray-50">
                         {editingCommentId === c.id ? (
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="text"
+                          <div className="space-y-1">
+                            <textarea
                               value={editingCommentContent}
                               onChange={e => setEditingCommentContent(e.target.value)}
-                              onKeyDown={e => { if (e.key === 'Enter') handleSaveEditComment(c.id); if (e.key === 'Escape') setEditingCommentId(null); }}
-                              className="flex-1 border border-indigo-300 rounded px-2 py-1 text-sm outline-none"
+                              onKeyDown={e => { if (e.key === 'Escape') setEditingCommentId(null); }}
+                              className="w-full border border-indigo-300 rounded px-2 py-1 text-sm outline-none resize-none"
+                              rows={2}
                               autoFocus
                               data-1p-ignore
-                              autoComplete="off"
                             />
-                            <button type="button" onClick={() => handleSaveEditComment(c.id)} className="text-indigo-500 hover:text-indigo-700 p-1"><Check size={14} /></button>
-                            <button type="button" onClick={() => setEditingCommentId(null)} className="text-gray-400 hover:text-gray-600 p-1"><X size={14} /></button>
+                            <div className="flex justify-end gap-1">
+                              <button type="button" onClick={() => setEditingCommentId(null)} className="text-gray-400 hover:text-gray-600 p-1 text-xs">取消</button>
+                              <button type="button" onClick={() => handleSaveEditComment(c.id)} className="text-indigo-500 hover:text-indigo-700 p-1 text-xs font-semibold">儲存</button>
+                            </div>
                           </div>
                         ) : (
                           <div className="flex items-start justify-between">
@@ -292,25 +293,25 @@ export default function TodoFormModal({ todo, statuses, allTasks, projects, allT
                     ))}
                   </div>
                 )}
-                <div className="flex items-center gap-1 border-t border-gray-200 px-2 py-1.5">
-                  <input
-                    type="text"
+                <div className="border-t border-gray-200 px-2 py-1.5 space-y-1">
+                  <textarea
                     value={commentInput}
                     onChange={e => setCommentInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddComment(); } }}
-                    className="flex-1 text-sm outline-none bg-transparent py-1"
+                    className="w-full text-sm outline-none bg-transparent resize-none"
+                    rows={2}
                     placeholder="輸入留言..."
                     data-1p-ignore
-                    autoComplete="off"
                   />
-                  <button
-                    type="button"
-                    onClick={handleAddComment}
-                    disabled={!commentInput.trim()}
-                    className="text-indigo-500 hover:text-indigo-700 disabled:text-gray-300 p-1"
-                  >
-                    <Send size={14} />
-                  </button>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleAddComment}
+                      disabled={!commentInput.trim()}
+                      className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 disabled:text-gray-300 font-semibold px-2 py-1"
+                    >
+                      <Send size={12} /> 送出
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
