@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { Plus, EyeOff, Eye, Filter, X, GripVertical, Play, Flag } from 'lucide-react';
+import { Plus, EyeOff, Eye, Filter, X, GripVertical, Play, Flag, ArrowUpDown } from 'lucide-react';
 import TodoCard from './TodoCard';
 import TodoFormModal from './TodoFormModal';
 
@@ -19,6 +19,9 @@ export default function TodoBoard({
   const [filterPriorities, setFilterPriorities] = useState(new Set());
   const [filterTags, setFilterTags] = useState(new Set());
   const [showFilters, setShowFilters] = useState(false);
+
+  // Sort: null | 'priority-desc' | 'priority-asc' | 'dueDate-asc' | 'dueDate-desc'
+  const [sortBy, setSortBy] = useState(null);
 
   const toggleFilter = (setter, value) => {
     setter(prev => {
@@ -57,14 +60,27 @@ export default function TodoBoard({
   }, [todos, filterAssignees, filterPriorities, filterTags]);
 
   const columnTodos = useMemo(() => {
+    const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
     const grouped = {};
     statuses.forEach(s => { grouped[s.id] = []; });
     filteredTodos.forEach(t => {
       if (grouped[t.status]) grouped[t.status].push(t);
     });
-    Object.values(grouped).forEach(arr => arr.sort((a, b) => a.sortOrder - b.sortOrder));
+    Object.values(grouped).forEach(arr => {
+      if (sortBy === 'priority-desc') {
+        arr.sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
+      } else if (sortBy === 'priority-asc') {
+        arr.sort((a, b) => PRIORITY_ORDER[b.priority] - PRIORITY_ORDER[a.priority]);
+      } else if (sortBy === 'dueDate-asc') {
+        arr.sort((a, b) => (a.dueDate || '9999') < (b.dueDate || '9999') ? -1 : 1);
+      } else if (sortBy === 'dueDate-desc') {
+        arr.sort((a, b) => (b.dueDate || '') < (a.dueDate || '') ? -1 : 1);
+      } else {
+        arr.sort((a, b) => a.sortOrder - b.sortOrder);
+      }
+    });
     return grouped;
-  }, [filteredTodos, statuses]);
+  }, [filteredTodos, statuses, sortBy]);
 
   // --- Todo drag-and-drop ---
   const handleDrop = useCallback((e, targetStatusId) => {
@@ -226,6 +242,22 @@ export default function TodoBoard({
               清除篩選
             </button>
           )}
+          <span className="w-px h-5 bg-gray-200" />
+          {/* Sort buttons */}
+          <button
+            onClick={() => setSortBy(s => s === 'priority-desc' ? 'priority-asc' : s === 'priority-asc' ? null : 'priority-desc')}
+            className={`flex items-center gap-1 px-2 py-1.5 text-xs border rounded-lg transition ${sortBy?.startsWith('priority') ? 'border-amber-300 text-amber-600 bg-amber-50' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+          >
+            <ArrowUpDown size={12} />
+            優先級{sortBy === 'priority-desc' ? ' ↓' : sortBy === 'priority-asc' ? ' ↑' : ''}
+          </button>
+          <button
+            onClick={() => setSortBy(s => s === 'dueDate-asc' ? 'dueDate-desc' : s === 'dueDate-desc' ? null : 'dueDate-asc')}
+            className={`flex items-center gap-1 px-2 py-1.5 text-xs border rounded-lg transition ${sortBy?.startsWith('dueDate') ? 'border-amber-300 text-amber-600 bg-amber-50' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+          >
+            <ArrowUpDown size={12} />
+            到期日{sortBy === 'dueDate-asc' ? ' ↑' : sortBy === 'dueDate-desc' ? ' ↓' : ''}
+          </button>
         </div>
         <button
           onClick={() => setHideDone(h => !h)}
