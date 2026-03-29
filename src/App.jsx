@@ -2043,26 +2043,20 @@ export default function BurnupChartApp() {
                             <div className="h-full bg-blue-500 rounded-full" style={{ width: `${stats.expectedPct}%` }}></div>
                           </div>
                         </div>
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-xs text-gray-500 mb-1">
-                            <span>實際完成 (Actual)</span>
-                            <span className="font-mono">{stats.actualPct}%</span>
-                          </div>
-                          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full ${stats.actualPct === 100 ? 'bg-emerald-500' : 'bg-gray-300'}`} style={{ width: `${stats.actualPct}%` }}></div>
-                          </div>
-                        </div>
-                        {todoProgressByTask[activeDetailTask.id] && (() => {
-                          const { total, done } = todoProgressByTask[activeDetailTask.id];
-                          const todoPct = Math.round((done / total) * 100);
+                        {(() => {
+                          const tp = todoProgressByTask[activeDetailTask.id];
+                          const pct = tp ? Math.round((tp.done / tp.total) * 100) : stats.actualPct;
+                          const label = tp ? `Todo 進度 (${tp.done}/${tp.total})` : '實際完成 (Actual)';
+                          const barColor = pct === 100 ? 'bg-emerald-500' : tp ? 'bg-amber-400' : 'bg-gray-300';
+                          const textColor = pct === 100 ? 'text-emerald-600' : tp ? 'text-amber-500' : 'text-gray-500';
                           return (
                             <div className="space-y-1">
                               <div className="flex justify-between text-xs text-gray-500 mb-1">
-                                <span>Todo 進度 ({done}/{total})</span>
-                                <span className="font-mono">{todoPct}%</span>
+                                <span>{label}</span>
+                                <span className={`font-mono ${textColor}`}>{pct}%</span>
                               </div>
                               <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                                <div className={`h-full rounded-full ${todoPct === 100 ? 'bg-amber-500' : 'bg-amber-300'}`} style={{ width: `${todoPct}%` }} />
+                                <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
                               </div>
                             </div>
                           );
@@ -2640,23 +2634,19 @@ export default function BurnupChartApp() {
                                   </div>
                                   <span className="text-[10px] text-blue-600 font-mono w-6 text-right">{expectedPct}%</span>
                                 </div>
-                                {/* Actual Progress Bar (Completion) */}
-                                <div className="flex items-center gap-1" title="完成度 (Actual)">
-                                  <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden flex-1">
-                                    <div className={`h-full ${actualPct === 100 ? 'bg-emerald-500' : 'bg-gray-300'}`} style={{ width: `${actualPct}%` }}></div>
-                                  </div>
-                                  <span className={`text-[10px] font-mono w-6 text-right ${actualPct === 100 ? 'text-emerald-600 font-bold' : 'text-gray-400'}`}>{actualPct}%</span>
-                                </div>
-                                {/* Todo Progress Bar */}
-                                {todoProgressByTask[task.id] && (() => {
-                                  const { total, done } = todoProgressByTask[task.id];
-                                  const todoPct = Math.round((done / total) * 100);
+                                {/* Actual / Todo Progress Bar */}
+                                {(() => {
+                                  const tp = todoProgressByTask[task.id];
+                                  const pct = tp ? Math.round((tp.done / tp.total) * 100) : actualPct;
+                                  const label = tp ? `Todo 進度 (${tp.done}/${tp.total})` : '完成度 (Actual)';
+                                  const barColor = pct === 100 ? 'bg-emerald-500' : tp ? 'bg-amber-400' : 'bg-gray-300';
+                                  const textColor = pct === 100 ? 'text-emerald-600 font-bold' : tp ? 'text-amber-500' : 'text-gray-400';
                                   return (
-                                    <div className="flex items-center gap-1" title={`Todo 進度 (${done}/${total})`}>
+                                    <div className="flex items-center gap-1" title={label}>
                                       <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden flex-1">
-                                        <div className={`h-full ${todoPct === 100 ? 'bg-amber-500' : 'bg-amber-300'}`} style={{ width: `${todoPct}%` }} />
+                                        <div className={`h-full ${barColor}`} style={{ width: `${pct}%` }} />
                                       </div>
-                                      <span className={`text-[10px] font-mono w-6 text-right ${todoPct === 100 ? 'text-amber-600 font-bold' : 'text-amber-400'}`}>{todoPct}%</span>
+                                      <span className={`text-[10px] font-mono w-6 text-right ${textColor}`}>{pct}%</span>
                                     </div>
                                   );
                                 })()}
