@@ -34,7 +34,7 @@ app.add_middleware(
     allow_origins=parse_cors_origins(),
     allow_credentials=False,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
 LogPayload = Dict[str, str]
@@ -263,11 +263,7 @@ def row_to_log(row: sqlite3.Row) -> LogPayload:
     Returns:
         Dict[str, str]: Log payload dictionary.
     """
-    return {
-        "id": row["id"],
-        "date": row["date"],
-        "content": row["content"]
-    }
+    return {"id": row["id"], "date": row["date"], "content": row["content"]}
 
 
 def row_to_task(row: sqlite3.Row, logs: List[LogPayload]) -> TaskPayload:
@@ -291,13 +287,12 @@ def row_to_task(row: sqlite3.Row, logs: List[LogPayload]) -> TaskPayload:
         "actualStart": normalize_text(row["actual_start"]),
         "actualEnd": normalize_text(row["actual_end"]),
         "showLabel": bool(row["show_label"]),
-        "logs": logs
+        "logs": logs,
     }
 
 
 def fetch_project(
-    conn: sqlite3.Connection,
-    project_id: str
+    conn: sqlite3.Connection, project_id: str
 ) -> Optional[ProjectPayload]:
     """Fetch a project along with tasks and logs.
 
@@ -309,15 +304,13 @@ def fetch_project(
         Optional[Dict[str, Any]]: Project payload or None if not found.
     """
     project_row = conn.execute(
-        "SELECT id, name FROM projects WHERE id = ?",
-        (project_id,)
+        "SELECT id, name FROM projects WHERE id = ?", (project_id,)
     ).fetchone()
     if not project_row:
         return None
 
     task_rows = conn.execute(
-        "SELECT * FROM tasks WHERE project_id = ? ORDER BY created_at",
-        (project_id,)
+        "SELECT * FROM tasks WHERE project_id = ? ORDER BY created_at", (project_id,)
     ).fetchall()
 
     task_ids = [row["id"] for row in task_rows]
@@ -326,21 +319,14 @@ def fetch_project(
         placeholders = ",".join("?" for _ in task_ids)
         log_rows = conn.execute(
             f"SELECT * FROM logs WHERE task_id IN ({placeholders}) ORDER BY created_at",
-            task_ids
+            task_ids,
         ).fetchall()
         for row in log_rows:
             logs_by_task.setdefault(row["task_id"], []).append(row_to_log(row))
 
-    tasks = [
-        row_to_task(row, logs_by_task.get(row["id"], []))
-        for row in task_rows
-    ]
+    tasks = [row_to_task(row, logs_by_task.get(row["id"], [])) for row in task_rows]
 
-    return {
-        "id": project_row["id"],
-        "name": project_row["name"],
-        "tasks": tasks
-    }
+    return {"id": project_row["id"], "name": project_row["name"], "tasks": tasks}
 
 
 def fetch_task(conn: sqlite3.Connection, task_id: str) -> Optional[TaskPayload]:
@@ -353,15 +339,11 @@ def fetch_task(conn: sqlite3.Connection, task_id: str) -> Optional[TaskPayload]:
     Returns:
         Optional[Dict[str, Any]]: Task payload or None if not found.
     """
-    task_row = conn.execute(
-        "SELECT * FROM tasks WHERE id = ?",
-        (task_id,)
-    ).fetchone()
+    task_row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
     if not task_row:
         return None
     log_rows = conn.execute(
-        "SELECT * FROM logs WHERE task_id = ? ORDER BY created_at",
-        (task_id,)
+        "SELECT * FROM logs WHERE task_id = ? ORDER BY created_at", (task_id,)
     ).fetchall()
     logs = [row_to_log(row) for row in log_rows]
     return row_to_task(task_row, logs)
@@ -394,12 +376,8 @@ def list_projects() -> List[ProjectPayload]:
         project_rows = conn.execute(
             "SELECT id, name FROM projects ORDER BY created_at"
         ).fetchall()
-        task_rows = conn.execute(
-            "SELECT * FROM tasks ORDER BY created_at"
-        ).fetchall()
-        log_rows = conn.execute(
-            "SELECT * FROM logs ORDER BY created_at"
-        ).fetchall()
+        task_rows = conn.execute("SELECT * FROM tasks ORDER BY created_at").fetchall()
+        log_rows = conn.execute("SELECT * FROM logs ORDER BY created_at").fetchall()
 
     logs_by_task: Dict[str, List[LogPayload]] = {}
     for row in log_rows:
@@ -414,7 +392,7 @@ def list_projects() -> List[ProjectPayload]:
         {
             "id": row["id"],
             "name": row["name"],
-            "tasks": tasks_by_project.get(row["id"], [])
+            "tasks": tasks_by_project.get(row["id"], []),
         }
         for row in project_rows
     ]
@@ -441,9 +419,7 @@ def get_project(project_id: str) -> ProjectPayload:
 
 
 @app.post(
-    "/api/projects",
-    response_model=ProjectOut,
-    status_code=status.HTTP_201_CREATED
+    "/api/projects", response_model=ProjectOut, status_code=status.HTTP_201_CREATED
 )
 def create_project(payload: ProjectCreate) -> ProjectPayload:
     """Create a new project.
@@ -462,15 +438,14 @@ def create_project(payload: ProjectCreate) -> ProjectPayload:
 
     with get_connection() as conn:
         existing = conn.execute(
-            "SELECT 1 FROM projects WHERE id = ?",
-            (project_id,)
+            "SELECT 1 FROM projects WHERE id = ?", (project_id,)
         ).fetchone()
         if existing:
             raise HTTPException(status_code=409, detail="Project id already exists")
 
         conn.execute(
             "INSERT INTO projects (id, name, created_at) VALUES (?, ?, ?)",
-            (project_id, payload.name, now)
+            (project_id, payload.name, now),
         )
         conn.commit()
         project = fetch_project(conn, project_id)
@@ -494,16 +469,14 @@ def update_project(project_id: str, payload: ProjectUpdate) -> ProjectPayload:
     """
     with get_connection() as conn:
         existing = conn.execute(
-            "SELECT 1 FROM projects WHERE id = ?",
-            (project_id,)
+            "SELECT 1 FROM projects WHERE id = ?", (project_id,)
         ).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Project not found")
 
         if payload.name is not None:
             conn.execute(
-                "UPDATE projects SET name = ? WHERE id = ?",
-                (payload.name, project_id)
+                "UPDATE projects SET name = ? WHERE id = ?", (payload.name, project_id)
             )
             conn.commit()
 
@@ -526,10 +499,7 @@ def delete_project(project_id: str) -> None:
         HTTPException: If the project does not exist.
     """
     with get_connection() as conn:
-        result = conn.execute(
-            "DELETE FROM projects WHERE id = ?",
-            (project_id,)
-        )
+        result = conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
         conn.commit()
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -539,7 +509,7 @@ def delete_project(project_id: str) -> None:
 @app.post(
     "/api/projects/{project_id}/tasks",
     response_model=TaskOut,
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
 )
 def create_task(project_id: str, payload: TaskCreate) -> TaskPayload:
     """Create a task under a project.
@@ -559,15 +529,13 @@ def create_task(project_id: str, payload: TaskCreate) -> TaskPayload:
 
     with get_connection() as conn:
         project_row = conn.execute(
-            "SELECT 1 FROM projects WHERE id = ?",
-            (project_id,)
+            "SELECT 1 FROM projects WHERE id = ?", (project_id,)
         ).fetchone()
         if not project_row:
             raise HTTPException(status_code=404, detail="Project not found")
 
         existing = conn.execute(
-            "SELECT 1 FROM tasks WHERE id = ?",
-            (task_id,)
+            "SELECT 1 FROM tasks WHERE id = ?", (task_id,)
         ).fetchone()
         if existing:
             raise HTTPException(status_code=409, detail="Task id already exists")
@@ -592,8 +560,8 @@ def create_task(project_id: str, payload: TaskCreate) -> TaskPayload:
                 payload.actualStart,
                 payload.actualEnd,
                 1 if payload.showLabel else 0,
-                now
-            )
+                now,
+            ),
         )
         conn.commit()
         task = fetch_task(conn, task_id)
@@ -648,18 +616,14 @@ def update_task(task_id: str, payload: TaskUpdate) -> TaskPayload:
 
     with get_connection() as conn:
         existing = conn.execute(
-            "SELECT 1 FROM tasks WHERE id = ?",
-            (task_id,)
+            "SELECT 1 FROM tasks WHERE id = ?", (task_id,)
         ).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Task not found")
 
         if fields:
             values.append(task_id)
-            conn.execute(
-                f"UPDATE tasks SET {', '.join(fields)} WHERE id = ?",
-                values
-            )
+            conn.execute(f"UPDATE tasks SET {', '.join(fields)} WHERE id = ?", values)
             conn.commit()
 
         task = fetch_task(conn, task_id)
@@ -681,10 +645,7 @@ def delete_task(task_id: str) -> None:
         HTTPException: If the task does not exist.
     """
     with get_connection() as conn:
-        result = conn.execute(
-            "DELETE FROM tasks WHERE id = ?",
-            (task_id,)
-        )
+        result = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         conn.commit()
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -694,7 +655,7 @@ def delete_task(task_id: str) -> None:
 @app.post(
     "/api/tasks/{task_id}/logs",
     response_model=LogOut,
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
 )
 def create_log(task_id: str, payload: LogCreate) -> LogPayload:
     """Create a log entry for a task.
@@ -714,30 +675,23 @@ def create_log(task_id: str, payload: LogCreate) -> LogPayload:
 
     with get_connection() as conn:
         task_row = conn.execute(
-            "SELECT 1 FROM tasks WHERE id = ?",
-            (task_id,)
+            "SELECT 1 FROM tasks WHERE id = ?", (task_id,)
         ).fetchone()
         if not task_row:
             raise HTTPException(status_code=404, detail="Task not found")
 
-        existing = conn.execute(
-            "SELECT 1 FROM logs WHERE id = ?",
-            (log_id,)
-        ).fetchone()
+        existing = conn.execute("SELECT 1 FROM logs WHERE id = ?", (log_id,)).fetchone()
         if existing:
             raise HTTPException(status_code=409, detail="Log id already exists")
 
         conn.execute(
             "INSERT INTO logs (id, task_id, date, content, created_at) "
             "VALUES (?, ?, ?, ?, ?)",
-            (log_id, task_id, payload.date, payload.content, now)
+            (log_id, task_id, payload.date, payload.content, now),
         )
         conn.commit()
 
-        log_row = conn.execute(
-            "SELECT * FROM logs WHERE id = ?",
-            (log_id,)
-        ).fetchone()
+        log_row = conn.execute("SELECT * FROM logs WHERE id = ?", (log_id,)).fetchone()
 
     return row_to_log(log_row)
 
@@ -756,10 +710,7 @@ def delete_log(log_id: str) -> None:
         HTTPException: If the log entry does not exist.
     """
     with get_connection() as conn:
-        result = conn.execute(
-            "DELETE FROM logs WHERE id = ?",
-            (log_id,)
-        )
+        result = conn.execute("DELETE FROM logs WHERE id = ?", (log_id,))
         conn.commit()
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Log not found")

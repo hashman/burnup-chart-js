@@ -13,7 +13,9 @@ import db
 import main
 
 
-def create_project(client: TestClient, name: str, project_id: str = "") -> Dict[str, Any]:
+def create_project(
+    client: TestClient, name: str, project_id: str = ""
+) -> Dict[str, Any]:
     """Create a project using the API.
 
     Args:
@@ -36,10 +38,7 @@ def create_project(client: TestClient, name: str, project_id: str = "") -> Dict[
 
 
 def create_task(
-    client: TestClient,
-    project_id: str,
-    name: str,
-    task_id: str = ""
+    client: TestClient, project_id: str, name: str, task_id: str = ""
 ) -> Dict[str, Any]:
     """Create a task using the API.
 
@@ -64,7 +63,7 @@ def create_task(
         "expectedEnd": "2024-01-05",
         "actualStart": "",
         "actualEnd": "",
-        "showLabel": True
+        "showLabel": True,
     }
     if task_id:
         payload["id"] = task_id
@@ -95,8 +94,7 @@ def create_log(client: TestClient, task_id: str, content: str) -> Dict[str, Any]
 
 @pytest.fixture()
 def client(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Generator[TestClient, None, None]:
     """Provide a test client backed by an isolated SQLite database.
 
@@ -155,8 +153,7 @@ def test_project_crud_flow(client: TestClient) -> None:
     assert get_response.json()["name"] == "Alpha"
 
     update_response = client.patch(
-        f"/api/projects/{project_id}",
-        json={"name": "Alpha Updated"}
+        f"/api/projects/{project_id}", json={"name": "Alpha Updated"}
     )
     assert update_response.status_code == 200
     assert update_response.json()["name"] == "Alpha Updated"
@@ -188,8 +185,7 @@ def test_task_crud_flow(client: TestClient) -> None:
     assert task["showLabel"] is True
 
     update_response = client.patch(
-        f"/api/tasks/{task_id}",
-        json={"points": 8, "showLabel": False}
+        f"/api/tasks/{task_id}", json={"points": 8, "showLabel": False}
     )
     assert update_response.status_code == 200
     assert update_response.json()["points"] == 8
@@ -257,21 +253,15 @@ def test_duplicate_ids_return_conflict(client: TestClient) -> None:
     create_project(client, name="Primary", project_id=project_id)
 
     duplicate_project = client.post(
-        "/api/projects",
-        json={"id": project_id, "name": "Duplicate"}
+        "/api/projects", json={"id": project_id, "name": "Duplicate"}
     )
     assert duplicate_project.status_code == 409
 
     task_id = "task_fixed"
-    create_task(
-        client,
-        project_id=project_id,
-        name="Initial Task",
-        task_id=task_id
-    )
+    create_task(client, project_id=project_id, name="Initial Task", task_id=task_id)
     duplicate_task = client.post(
         f"/api/projects/{project_id}/tasks",
-        json={"id": task_id, "name": "Duplicate Task", "points": 1}
+        json={"id": task_id, "name": "Duplicate Task", "points": 1},
     )
     assert duplicate_task.status_code == 409
 
@@ -292,7 +282,6 @@ def test_missing_project_returns_404(client: TestClient) -> None:
     assert response.status_code == 404
 
     response = client.post(
-        "/api/projects/does-not-exist/tasks",
-        json={"name": "Ghost Task", "points": 1}
+        "/api/projects/does-not-exist/tasks", json={"name": "Ghost Task", "points": 1}
     )
     assert response.status_code == 404
