@@ -353,7 +353,13 @@ function MergedProjectModal({ projects, initialSelectedIds, onConfirm, onCancel 
 
 export default function BurnupChartApp() {
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
-  const [activeProjectId, setActiveProjectId] = useState(INITIAL_PROJECTS[0].id);
+  const [activeProjectId, setActiveProjectId] = useState(() => {
+    const hash = window.location.hash.slice(1);
+    if (hash === 'todo') return TODO_TAB_ID;
+    if (hash === 'merged') return MERGED_TAB_ID;
+    if (hash) return hash;
+    return INITIAL_PROJECTS[0].id;
+  });
   const [filterPerson, setFilterPerson] = useState("");
   const [showAddTask, setShowAddTask] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -405,6 +411,26 @@ export default function BurnupChartApp() {
   const [newLogContent, setNewLogContent] = useState("");
   const [newLogDate, setNewLogDate] = useState(new Date().toISOString().split('T')[0]);
 
+  // Sync activeProjectId → location.hash
+  useEffect(() => {
+    const hash = activeProjectId === TODO_TAB_ID ? 'todo'
+      : activeProjectId === MERGED_TAB_ID ? 'merged'
+      : activeProjectId;
+    window.history.replaceState(null, '', `#${hash}`);
+  }, [activeProjectId]);
+
+  // Listen for back/forward navigation
+  useEffect(() => {
+    const onHashChange = () => {
+      const hash = window.location.hash.slice(1);
+      if (hash === 'todo') setActiveProjectId(TODO_TAB_ID);
+      else if (hash === 'merged') setActiveProjectId(MERGED_TAB_ID);
+      else if (hash) setActiveProjectId(hash);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
   // Todo & Status State
   const [todos, setTodos] = useState([]);
   const [statuses, setStatuses] = useState([]);
@@ -431,9 +457,12 @@ export default function BurnupChartApp() {
       try {
         const data = await requestJson("/api/projects");
         if (!isActive) return;
+        const hash = window.location.hash.slice(1);
+        const hashTab = hash === 'todo' ? TODO_TAB_ID : hash === 'merged' ? MERGED_TAB_ID : hash || null;
         if (Array.isArray(data) && data.length > 0) {
           setProjects(data);
-          setActiveProjectId(data[0].id);
+          const validProjectId = hashTab && (hashTab === TODO_TAB_ID || hashTab === MERGED_TAB_ID || data.some(p => p.id === hashTab));
+          if (!validProjectId) setActiveProjectId(data[0].id);
           setApiAvailable(true);
         } else {
           const created = await requestJson("/api/projects", {
@@ -442,7 +471,7 @@ export default function BurnupChartApp() {
           });
           if (!isActive) return;
           setProjects([created]);
-          setActiveProjectId(created.id);
+          if (!hashTab || (hashTab !== TODO_TAB_ID && hashTab !== MERGED_TAB_ID)) setActiveProjectId(created.id);
           setApiAvailable(true);
         }
         try {
