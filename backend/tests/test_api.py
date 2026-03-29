@@ -323,3 +323,170 @@ def test_todos_table_exists(client: TestClient) -> None:
         ).fetchone()
     assert row is not None
     assert row["name"] == "todos"
+
+
+# ---------------------------------------------------------------------------
+# Status CRUD helpers & tests
+# ---------------------------------------------------------------------------
+
+def create_status(client: TestClient, name: str, sort_order: float = None) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {"name": name}
+    if sort_order is not None:
+        payload["sort_order"] = sort_order
+    response = client.post("/api/statuses", json=payload)
+    assert response.status_code == 201
+    return response.json()
+
+
+def test_list_statuses(client: TestClient) -> None:
+    """GET /api/statuses returns default 3 statuses in order."""
+    response = client.get("/api/statuses")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 3
+    assert data[0]["name"] == "待辦"
+    assert data[1]["name"] == "進行中"
+    assert data[2]["name"] == "已完成"
+    # verify ordering
+    assert data[0]["sortOrder"] < data[1]["sortOrder"] < data[2]["sortOrder"]
+
+
+def test_create_status(client: TestClient) -> None:
+    """POST /api/statuses creates a new status with auto sort_order."""
+    s = create_status(client, "Review")
+    assert s["name"] == "Review"
+    assert s["id"].startswith("status_")
+    assert s["isDefaultStart"] is False
+    assert s["isDefaultEnd"] is False
+    # sort_order should be after the max existing (2)
+    assert s["sortOrder"] > 2
+
+
+def test_create_status_with_sort_order(client: TestClient) -> None:
+    """POST /api/statuses respects explicit sort_order."""
+    s = create_status(client, "QA", sort_order=1.5)
+    assert s["sortOrder"] == 1.5
+
+
+def test_create_status_empty_name_rejected(client: TestClient) -> None:
+    """POST /api/statuses rejects empty name with 400."""
+    response = client.post("/api/statuses", json={"name": ""})
+    assert response.status_code == 400
+
+    response = client.post("/api/statuses", json={"name": "   "})
+    assert response.status_code == 400
+
+
+def test_update_status_name(client: TestClient) -> None:
+    """PATCH /api/statuses/:id updates name."""
+    s = create_status(client, "Draft")
+    response = client.patch(f"/api/statuses/{s['id']}", json={"name": "Draft v2"})
+    assert response.status_code == 200
+    assert response.json()["name"] == "Draft v2"
+
+
+def test_update_status_default_start(client: TestClient) -> None:
+    """Setting is_default_start=true clears old start."""
+    # Get current statuses
+    statuses = client.get("/api/statuses").json()
+    old_start = [s for s in statuses if s["isDefaultStart"]][0]
+
+    new_s = create_status(client, "New Start")
+    response = client.patch(
+        f"/api/statuses/{new_s['id']}",
+        json={"is_default_start": True},
+    )
+    assert response.status_code == 200
+    assert response.json()["isDefaultStart"] is True
+
+    # Old start should be cleared
+    old_response = client.get("/api/statuses")
+    updated = {s["id"]: s for s in old_response.json()}
+    assert updated[old_start["id"]]["isDefaultStart"] is False
+    assert updated[new_s["id"]]["isDefaultStart"] is True
+
+
+def test_update_status_default_end(client: TestClient) -> None:
+    """Setting is_default_end=true clears old end."""
+    statuses = client.get("/api/statuses").json()
+    old_end = [s for s in statuses if s["isDefaultEnd"]][0]
+
+    new_s = create_status(client, "New End")
+    response = client.patch(
+        f"/api/statuses/{new_s['id']}",
+        json={"is_default_end": True},
+    )
+    assert response.status_code == 200
+    assert response.json()["isDefaultEnd"] is True
+
+    updated = {s["id"]: s for s in client.get("/api/statuses").json()}
+    assert updated[old_end["id"]]["isDefaultEnd"] is False
+    assert updated[new_s["id"]]["isDefaultEnd"] is True
+
+
+def test_update_status_not_found(client: TestClient) -> None:
+    """PATCH /api/statuses/:id returns 404 for missing status."""
+    response = client.patch("/api/statuses/nonexistent", json={"name": "X"})
+    assert response.status_code == 404
+
+
+def test_update_status_empty_name_rejected(client: TestClient) -> None:
+    """PATCH /api/statuses/:id rejects empty name with 400."""
+    s = create_status(client, "Temp")
+    response = client.patch(f"/api/statuses/{s['id']}", json={"name": ""})
+    assert response.status_code == 400
+
+    response = client.patch(f"/api/statuses/{s['id']}", json={"name": "   "})
+    assert response.status_code == 400
+
+
+def test_delete_status_no_todos(client: TestClient) -> None:
+    """DELETE /api/statuses/:id removes status with no todos."""
+    s = create_status(client, "Disposable")
+    response = client.delete(f"/api/statuses/{s['id']}")
+    assert response.status_code == 204
+
+    # Verify it's gone
+    statuses = client.get("/api/statuses").json()
+    ids = [st["id"] for st in statuses]
+    assert s["id"] not in ids
+
+
+def test_delete_default_start_rejected(client: TestClient) -> None:
+    """DELETE rejects deleting the default start status with 400."""
+    statuses = client.get("/api/statuses").json()
+    start_status = [s for s in statuses if s["isDefaultStart"]][0]
+    response = client.delete(f"/api/statuses/{start_status['id']}")
+    assert response.status_code == 400
+
+
+def test_delete_default_end_rejected(client: TestClient) -> None:
+    """DELETE rejects deleting the default end status with 400."""
+    statuses = client.get("/api/statuses").json()
+    end_status = [s for s in statuses if s["isDefaultEnd"]][0]
+    response = client.delete(f"/api/statuses/{end_status['id']}")
+    assert response.status_code == 400
+
+
+def test_delete_status_not_found(client: TestClient) -> None:
+    """DELETE /api/statuses/:id returns 404 for missing status."""
+    response = client.delete("/api/statuses/nonexistent")
+    assert response.status_code == 404
+
+
+def test_reorder_statuses(client: TestClient) -> None:
+    """POST /api/statuses/reorder batch-updates sort_order."""
+    statuses = client.get("/api/statuses").json()
+    # Reverse the order
+    reorder_payload = [
+        {"id": statuses[0]["id"], "sortOrder": 3.0},
+        {"id": statuses[1]["id"], "sortOrder": 2.0},
+        {"id": statuses[2]["id"], "sortOrder": 1.0},
+    ]
+    response = client.post("/api/statuses/reorder", json=reorder_payload)
+    assert response.status_code == 200
+    result = response.json()
+    # Should be returned in new order
+    assert result[0]["name"] == "已完成"
+    assert result[1]["name"] == "進行中"
+    assert result[2]["name"] == "待辦"
