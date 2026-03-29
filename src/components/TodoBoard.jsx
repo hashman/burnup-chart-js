@@ -1,0 +1,388 @@
+import React, { useState, useCallback, useMemo } from 'react';
+import { Plus, EyeOff, Eye, Filter, X, GripVertical, Play, Flag } from 'lucide-react';
+import TodoCard from './TodoCard';
+import TodoFormModal from './TodoFormModal';
+
+export default function TodoBoard({
+  todos, statuses, allTasks, projects,
+  onCreateTodo, onUpdateTodo, onDeleteTodo,
+  onCreateStatus, onUpdateStatus, onDeleteStatus, onReorderStatuses,
+}) {
+  const [editingTodo, setEditingTodo] = useState(null);
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragOverColumn, setDragOverColumn] = useState(null);
+  const [hideDone, setHideDone] = useState(false);
+
+  // Filters
+  const [filterAssignee, setFilterAssignee] = useState('');
+  const [filterPriority, setFilterPriority] = useState('');
+  const [filterTag, setFilterTag] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Column editing state
+  const [editingColumnId, setEditingColumnId] = useState(null);
+  const [editingColumnName, setEditingColumnName] = useState('');
+  const [draggingColumnId, setDraggingColumnId] = useState(null);
+  const [dragOverColumnId, setDragOverColumnId] = useState(null);
+
+  const allTags = useMemo(() => {
+    const tagSet = new Set();
+    todos.forEach(t => (t.tags || []).forEach(tag => tagSet.add(tag)));
+    return Array.from(tagSet).sort();
+  }, [todos]);
+
+  const allAssignees = useMemo(() => {
+    const set = new Set();
+    todos.forEach(t => { if (t.assignee) set.add(t.assignee); });
+    return Array.from(set).sort();
+  }, [todos]);
+
+  const filteredTodos = useMemo(() => {
+    return todos.filter(t => {
+      if (filterAssignee && t.assignee !== filterAssignee) return false;
+      if (filterPriority && t.priority !== filterPriority) return false;
+      if (filterTag && !(t.tags || []).includes(filterTag)) return false;
+      return true;
+    });
+  }, [todos, filterAssignee, filterPriority, filterTag]);
+
+  const columnTodos = useMemo(() => {
+    const grouped = {};
+    statuses.forEach(s => { grouped[s.id] = []; });
+    filteredTodos.forEach(t => {
+      if (grouped[t.status]) grouped[t.status].push(t);
+    });
+    Object.values(grouped).forEach(arr => arr.sort((a, b) => a.sortOrder - b.sortOrder));
+    return grouped;
+  }, [filteredTodos, statuses]);
+
+  // --- Todo drag-and-drop ---
+  const handleDrop = useCallback((e, targetStatusId) => {
+    e.preventDefault();
+    const todoId = e.dataTransfer.getData('text/plain');
+    if (!todoId) return;
+    const todo = todos.find(t => t.id === todoId);
+    if (!todo || todo.status === targetStatusId) {
+      setDragOverColumn(null);
+      setDraggingId(null);
+      return;
+    }
+    onUpdateTodo(todoId, { status: targetStatusId });
+    setDragOverColumn(null);
+    setDraggingId(null);
+  }, [todos, onUpdateTodo]);
+
+  const handleDragOver = useCallback((e, colId) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverColumn(colId);
+  }, []);
+
+  // --- Column inline editing ---
+  const startEditColumn = (status) => {
+    setEditingColumnId(status.id);
+    setEditingColumnName(status.name);
+  };
+
+  const saveColumnName = () => {
+    if (editingColumnId && editingColumnName.trim()) {
+      onUpdateStatus(editingColumnId, { name: editingColumnName.trim() });
+    }
+    setEditingColumnId(null);
+    setEditingColumnName('');
+  };
+
+  const cancelEditColumn = () => {
+    setEditingColumnId(null);
+    setEditingColumnName('');
+  };
+
+  const handleAddColumn = async () => {
+    const endStatus = statuses.find(s => s.isDefaultEnd);
+    const sortOrder = endStatus ? endStatus.sortOrder - 0.5 : statuses.length;
+    const result = await onCreateStatus({ name: '新狀態', sortOrder });
+    if (result) {
+      setEditingColumnId(result.id);
+      setEditingColumnName(result.name);
+    }
+  };
+
+  const handleDeleteColumn = (statusToDelete) => {
+    const todosInColumn = todos.filter(t => t.status === statusToDelete.id);
+    if (todosInColumn.length === 0) {
+      if (window.confirm(`確定要刪除「${statusToDelete.name}」狀態嗎？`)) {
+        onDeleteStatus(statusToDelete.id);
+      }
+    } else {
+      const otherStatuses = statuses.filter(s => s.id !== statusToDelete.id);
+      const targetName = window.prompt(
+        `「${statusToDelete.name}」下有 ${todosInColumn.length} 個 Todo。\n請輸入要遷移到的狀態名稱：\n${otherStatuses.map(s => s.name).join('、')}`
+      );
+      if (targetName) {
+        const target = otherStatuses.find(s => s.name === targetName);
+        if (target) {
+          onDeleteStatus(statusToDelete.id, target.id);
+        }
+      }
+    }
+  };
+
+  // --- Column drag-and-drop ---
+  const handleColumnDragStart = (e, statusId) => {
+    e.dataTransfer.setData('column-id', statusId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingColumnId(statusId);
+  };
+
+  const handleColumnDragOver = (e, statusId) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (statusId !== draggingColumnId) {
+      setDragOverColumnId(statusId);
+    }
+  };
+
+  const handleColumnDrop = (e, targetStatusId) => {
+    e.preventDefault();
+    const sourceId = e.dataTransfer.getData('column-id');
+    if (!sourceId || sourceId === targetStatusId) {
+      setDraggingColumnId(null);
+      setDragOverColumnId(null);
+      return;
+    }
+    const ordered = [...statuses];
+    const sourceIdx = ordered.findIndex(s => s.id === sourceId);
+    const targetIdx = ordered.findIndex(s => s.id === targetStatusId);
+    const [moved] = ordered.splice(sourceIdx, 1);
+    ordered.splice(targetIdx, 0, moved);
+    onReorderStatuses(ordered);
+    setDraggingColumnId(null);
+    setDragOverColumnId(null);
+  };
+
+  // --- Modal handlers ---
+  const openCreate = () => {
+    setEditingTodo(null);
+    setShowFormModal(true);
+  };
+
+  const openEdit = (todo) => {
+    setEditingTodo(todo);
+    setShowFormModal(true);
+  };
+
+  const handleSave = (data) => {
+    if (data.id) {
+      onUpdateTodo(data.id, data);
+    } else {
+      onCreateTodo(data);
+    }
+    setShowFormModal(false);
+    setEditingTodo(null);
+  };
+
+  const handleDelete = (id) => {
+    onDeleteTodo(id);
+    setShowFormModal(false);
+    setEditingTodo(null);
+  };
+
+  const hasActiveFilters = filterAssignee || filterPriority || filterTag;
+  const endStatus = statuses.find(s => s.isDefaultEnd);
+  const endStatusName = endStatus ? endStatus.name : '已完成';
+
+  return (
+    <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-1 px-3 py-2 text-sm bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition"
+          >
+            <Plus size={16} /> 新增 Todo
+          </button>
+          <button
+            onClick={() => setShowFilters(f => !f)}
+            className={`flex items-center gap-1 px-3 py-2 text-sm border rounded-lg transition ${hasActiveFilters ? 'border-indigo-300 text-indigo-600 bg-indigo-50' : 'border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+          >
+            <Filter size={14} /> 篩選
+          </button>
+          {hasActiveFilters && (
+            <button
+              onClick={() => { setFilterAssignee(''); setFilterPriority(''); setFilterTag(''); }}
+              className="text-xs text-gray-400 hover:text-gray-600"
+            >
+              清除篩選
+            </button>
+          )}
+        </div>
+        <button
+          onClick={() => setHideDone(h => !h)}
+          className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        >
+          {hideDone ? <Eye size={14} /> : <EyeOff size={14} />}
+          {hideDone ? `顯示${endStatusName}` : `隱藏${endStatusName}`}
+        </button>
+      </div>
+
+      {/* Filter bar */}
+      {showFilters && (
+        <div className="flex gap-3 items-center bg-gray-50 p-3 rounded-lg border border-gray-200">
+          <select value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)} className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 outline-none focus:border-indigo-500">
+            <option value="">所有指派人</option>
+            {allAssignees.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)} className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 outline-none focus:border-indigo-500">
+            <option value="">所有優先級</option>
+            <option value="high">高</option>
+            <option value="medium">中</option>
+            <option value="low">低</option>
+          </select>
+          <select value={filterTag} onChange={e => setFilterTag(e.target.value)} className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 outline-none focus:border-indigo-500">
+            <option value="">所有標籤</option>
+            {allTags.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Kanban Columns */}
+      <div className="flex gap-4 overflow-x-auto pb-2" style={{ minHeight: '60vh' }}>
+        {statuses.map(col => {
+          if (col.isDefaultEnd && hideDone) return null;
+          const items = columnTodos[col.id] || [];
+          const isOver = dragOverColumn === col.id;
+          const isColumnDragOver = dragOverColumnId === col.id;
+          const canDelete = !col.isDefaultStart && !col.isDefaultEnd;
+
+          return (
+            <div
+              key={col.id}
+              onDragOver={(e) => {
+                if (draggingColumnId) {
+                  handleColumnDragOver(e, col.id);
+                } else {
+                  handleDragOver(e, col.id);
+                }
+              }}
+              onDragLeave={() => {
+                setDragOverColumn(null);
+                setDragOverColumnId(null);
+              }}
+              onDrop={(e) => {
+                if (draggingColumnId) {
+                  handleColumnDrop(e, col.id);
+                } else {
+                  handleDrop(e, col.id);
+                }
+              }}
+              className={`
+                min-w-[280px] flex-1 bg-gray-50 rounded-xl border-t-4
+                ${col.isDefaultStart ? 'border-gray-300' : col.isDefaultEnd ? 'border-emerald-400' : 'border-blue-400'}
+                p-3 flex flex-col
+                ${isOver ? 'ring-2 ring-indigo-300 bg-indigo-50/30' : ''}
+                ${isColumnDragOver ? 'ring-2 ring-amber-300' : ''}
+                ${draggingColumnId === col.id ? 'opacity-50' : ''}
+              `}
+            >
+              <div className="flex justify-between items-center mb-3 group">
+                <div className="flex items-center gap-1">
+                  <button
+                    draggable
+                    onDragStart={(e) => handleColumnDragStart(e, col.id)}
+                    className="cursor-grab text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition"
+                  >
+                    <GripVertical size={14} />
+                  </button>
+                  {editingColumnId === col.id ? (
+                    <input
+                      autoFocus
+                      value={editingColumnName}
+                      onChange={e => setEditingColumnName(e.target.value)}
+                      onBlur={saveColumnName}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') saveColumnName();
+                        if (e.key === 'Escape') cancelEditColumn();
+                      }}
+                      className="text-sm font-bold text-gray-700 border border-indigo-300 rounded px-1 py-0.5 outline-none focus:ring-1 focus:ring-indigo-400 w-24"
+                    />
+                  ) : (
+                    <h3
+                      className="text-sm font-bold text-gray-700 cursor-pointer hover:text-indigo-600"
+                      onDoubleClick={() => startEditColumn(col)}
+                    >
+                      {col.name}
+                    </h3>
+                  )}
+                  {col.isDefaultStart && (
+                    <span title="起始狀態" className="text-xs text-gray-400"><Play size={10} /></span>
+                  )}
+                  {col.isDefaultEnd && (
+                    <span title="完成狀態" className="text-xs text-gray-400"><Flag size={10} /></span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-gray-400 bg-white px-2 py-0.5 rounded-full border border-gray-200">{items.length}</span>
+                  {canDelete && (
+                    <button
+                      onClick={() => handleDeleteColumn(col)}
+                      className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"
+                      title={`刪除「${col.name}」`}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 flex-1">
+                {items.length === 0 ? (
+                  <div className="text-center text-gray-300 text-sm py-8">
+                    沒有{col.name}事項
+                  </div>
+                ) : (
+                  items.map(todo => (
+                    <TodoCard
+                      key={todo.id}
+                      todo={todo}
+                      isDone={col.isDefaultEnd}
+                      onEdit={openEdit}
+                      onDragStart={setDraggingId}
+                      onDragEnd={() => { setDraggingId(null); setDragOverColumn(null); }}
+                      allTasks={allTasks}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Add Column Button */}
+        <div className="min-w-[60px] flex items-start justify-center pt-3">
+          <button
+            onClick={handleAddColumn}
+            className="flex items-center gap-1 px-3 py-2 text-sm text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg border border-dashed border-gray-300 hover:border-indigo-300 transition"
+            title="新增狀態"
+          >
+            <Plus size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Form Modal */}
+      {showFormModal && (
+        <TodoFormModal
+          todo={editingTodo}
+          statuses={statuses}
+          allTasks={allTasks}
+          projects={projects}
+          allTags={allTags}
+          onSave={handleSave}
+          onDelete={handleDelete}
+          onClose={() => { setShowFormModal(false); setEditingTodo(null); }}
+        />
+      )}
+    </div>
+  );
+}
