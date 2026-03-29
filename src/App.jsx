@@ -434,6 +434,7 @@ export default function BurnupChartApp() {
   // Todo & Status State
   const [todos, setTodos] = useState([]);
   const [statuses, setStatuses] = useState([]);
+  const [pendingEditTodoId, setPendingEditTodoId] = useState(null);
 
   const { getExpectedEndDate, getExpectedPoints, loading: holidayLoading } = useTaiwanCalendar();
 
@@ -2317,6 +2318,8 @@ export default function BurnupChartApp() {
               onCreateComment={createTodoComment}
               onUpdateComment={updateTodoComment}
               onDeleteComment={deleteTodoComment}
+              initialEditTodoId={pendingEditTodoId}
+              onClearInitialEditTodoId={() => setPendingEditTodoId(null)}
             />
           </div>
         </div>
@@ -2717,11 +2720,15 @@ export default function BurnupChartApp() {
                                             {taskTodos.map(td => {
                                               const isDone = td.status === endStatusId;
                                               return (
-                                                <div key={td.id} className="flex items-center gap-1.5 text-xs">
+                                                <div
+                                                  key={td.id}
+                                                  className="flex items-center gap-1.5 text-xs cursor-pointer hover:bg-gray-50 rounded px-1 py-0.5 -mx-1"
+                                                  onClick={(e) => { e.stopPropagation(); setPendingEditTodoId(td.id); setActiveProjectId(TODO_TAB_ID); }}
+                                                >
                                                   <span className={`w-3 h-3 rounded-sm border flex items-center justify-center shrink-0 ${isDone ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300'}`}>
                                                     {isDone && <Check size={8} />}
                                                   </span>
-                                                  <span className={isDone ? 'line-through text-gray-400' : 'text-gray-700'}>{td.title}</span>
+                                                  <span className={`${isDone ? 'line-through text-gray-400' : 'text-gray-700'} hover:text-indigo-600`}>{td.title}</span>
                                                 </div>
                                               );
                                             })}

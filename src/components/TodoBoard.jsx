@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Plus, EyeOff, Eye, Filter, X, GripVertical, Play, Flag, ArrowUpDown } from 'lucide-react';
 import TodoCard from './TodoCard';
 import TodoFormModal from './TodoFormModal';
@@ -8,6 +8,7 @@ export default function TodoBoard({
   onCreateTodo, onUpdateTodo, onDeleteTodo,
   onCreateStatus, onUpdateStatus, onDeleteStatus, onReorderStatuses,
   onCreateComment, onUpdateComment, onDeleteComment,
+  initialEditTodoId, onClearInitialEditTodoId,
 }) {
   const [editingTodoId, setEditingTodoId] = useState(null);
   const [showFormModal, setShowFormModal] = useState(false);
@@ -40,6 +41,14 @@ export default function TodoBoard({
   const [dragOverColumnId, setDragOverColumnId] = useState(null);
 
   const editingTodo = useMemo(() => editingTodoId ? todos.find(t => t.id === editingTodoId) || null : null, [editingTodoId, todos]);
+
+  useEffect(() => {
+    if (initialEditTodoId) {
+      setEditingTodoId(initialEditTodoId);
+      setShowFormModal(true);
+      onClearInitialEditTodoId();
+    }
+  }, [initialEditTodoId]);
 
   const allTags = useMemo(() => {
     const tagSet = new Set();
