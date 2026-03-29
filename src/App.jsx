@@ -672,6 +672,18 @@ export default function BurnupChartApp() {
 
   const allTasksFlat = useMemo(() => projects.flatMap(p => p.tasks), [projects]);
 
+  const endStatusId = useMemo(() => statuses.find(s => s.isDefaultEnd)?.id, [statuses]);
+  const todoProgressByTask = useMemo(() => {
+    const map = {};
+    todos.forEach(t => {
+      if (!t.linkedTaskId) return;
+      if (!map[t.linkedTaskId]) map[t.linkedTaskId] = { total: 0, done: 0 };
+      map[t.linkedTaskId].total++;
+      if (t.status === endStatusId) map[t.linkedTaskId].done++;
+    });
+    return map;
+  }, [todos, endStatusId]);
+
   const normalizedTasks = useMemo(() => allTasks.map(task => ({
     ...task,
     addedDate: normalizeDateString(task.addedDate),
@@ -2040,6 +2052,21 @@ export default function BurnupChartApp() {
                             <div className={`h-full rounded-full ${stats.actualPct === 100 ? 'bg-emerald-500' : 'bg-gray-300'}`} style={{ width: `${stats.actualPct}%` }}></div>
                           </div>
                         </div>
+                        {todoProgressByTask[activeDetailTask.id] && (() => {
+                          const { total, done } = todoProgressByTask[activeDetailTask.id];
+                          const todoPct = Math.round((done / total) * 100);
+                          return (
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                <span>Todo 進度 ({done}/{total})</span>
+                                <span className="font-mono">{todoPct}%</span>
+                              </div>
+                              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${todoPct === 100 ? 'bg-amber-500' : 'bg-amber-300'}`} style={{ width: `${todoPct}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </>
                     );
                   })()}
@@ -2620,6 +2647,19 @@ export default function BurnupChartApp() {
                                   </div>
                                   <span className={`text-[10px] font-mono w-6 text-right ${actualPct === 100 ? 'text-emerald-600 font-bold' : 'text-gray-400'}`}>{actualPct}%</span>
                                 </div>
+                                {/* Todo Progress Bar */}
+                                {todoProgressByTask[task.id] && (() => {
+                                  const { total, done } = todoProgressByTask[task.id];
+                                  const todoPct = Math.round((done / total) * 100);
+                                  return (
+                                    <div className="flex items-center gap-1" title={`Todo 進度 (${done}/${total})`}>
+                                      <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden flex-1">
+                                        <div className={`h-full ${todoPct === 100 ? 'bg-amber-500' : 'bg-amber-300'}`} style={{ width: `${todoPct}%` }} />
+                                      </div>
+                                      <span className={`text-[10px] font-mono w-6 text-right ${todoPct === 100 ? 'text-amber-600 font-bold' : 'text-amber-400'}`}>{todoPct}%</span>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             </td>
 
