@@ -11,7 +11,8 @@ export default function TodoFormModal({ todo, statuses, allTasks, projects, allT
     priority: 'medium',
     dueDate: '',
     assignee: '',
-    tagsInput: '',
+    tags: [],
+    tagInput: '',
     note: '',
     linkedTaskId: '',
   });
@@ -24,7 +25,8 @@ export default function TodoFormModal({ todo, statuses, allTasks, projects, allT
         priority: todo.priority || 'medium',
         dueDate: todo.dueDate || '',
         assignee: todo.assignee || '',
-        tagsInput: (todo.tags || []).join(', '),
+        tags: todo.tags || [],
+        tagInput: '',
         note: todo.note || '',
         linkedTaskId: todo.linkedTaskId || '',
       });
@@ -43,13 +45,27 @@ export default function TodoFormModal({ todo, statuses, allTasks, projects, allT
     return options;
   }, [projects]);
 
+  const addTag = (value) => {
+    const tag = value.trim();
+    if (tag && !form.tags.includes(tag)) {
+      setForm(f => ({ ...f, tags: [...f.tags, tag], tagInput: '' }));
+    } else {
+      setForm(f => ({ ...f, tagInput: '' }));
+    }
+  };
+
+  const removeTag = (tag) => {
+    setForm(f => ({ ...f, tags: f.tags.filter(t => t !== tag) }));
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.title.trim()) return;
-    const tags = form.tagsInput
-      .split(',')
-      .map(t => t.trim())
-      .filter(Boolean);
+    // Include any pending tag input
+    const finalTags = [...form.tags];
+    if (form.tagInput.trim() && !finalTags.includes(form.tagInput.trim())) {
+      finalTags.push(form.tagInput.trim());
+    }
     onSave({
       ...(todo ? { id: todo.id } : {}),
       title: form.title.trim(),
@@ -57,16 +73,15 @@ export default function TodoFormModal({ todo, statuses, allTasks, projects, allT
       priority: form.priority,
       dueDate: form.dueDate || null,
       assignee: form.assignee || null,
-      tags,
+      tags: finalTags,
       note: form.note || null,
       linkedTaskId: form.linkedTaskId || null,
     });
   };
 
   const tagSuggestions = useMemo(() => {
-    const currentTags = form.tagsInput.split(',').map(t => t.trim().toLowerCase());
-    return (allTags || []).filter(t => !currentTags.includes(t.toLowerCase()));
-  }, [allTags, form.tagsInput]);
+    return (allTags || []).filter(t => !form.tags.includes(t));
+  }, [allTags, form.tags]);
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[80] p-4" onClick={onClose}>
@@ -154,17 +169,35 @@ export default function TodoFormModal({ todo, statuses, allTasks, projects, allT
 
           {/* Tags */}
           <div>
-            <label className="text-xs font-medium text-gray-600 block mb-1">標籤（逗號分隔）</label>
-            <input
-              type="text"
-              value={form.tagsInput}
-              onChange={e => setForm(f => ({ ...f, tagsInput: e.target.value }))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none"
-              placeholder="Frontend, Backend, ..."
-              list="tag-suggestions"
-              data-1p-ignore
-              autoComplete="off"
-            />
+            <label className="text-xs font-medium text-gray-600 block mb-1">標籤</label>
+            <div className="flex flex-wrap gap-1.5 border border-gray-300 rounded-lg px-2 py-1.5 focus-within:border-indigo-500 min-h-[38px] items-center">
+              {form.tags.map(tag => (
+                <span key={tag} className="flex items-center gap-0.5 bg-indigo-50 text-indigo-700 text-xs px-2 py-0.5 rounded-md">
+                  {tag}
+                  <button type="button" onClick={() => removeTag(tag)} className="text-indigo-400 hover:text-indigo-700 ml-0.5">&times;</button>
+                </span>
+              ))}
+              <input
+                type="text"
+                value={form.tagInput}
+                onChange={e => setForm(f => ({ ...f, tagInput: e.target.value }))}
+                onKeyDown={e => {
+                  if ((e.key === 'Enter' || e.key === ',') && form.tagInput.trim()) {
+                    e.preventDefault();
+                    addTag(form.tagInput);
+                  }
+                  if (e.key === 'Backspace' && !form.tagInput && form.tags.length > 0) {
+                    removeTag(form.tags[form.tags.length - 1]);
+                  }
+                }}
+                onBlur={() => { if (form.tagInput.trim()) addTag(form.tagInput); }}
+                className="flex-1 min-w-[80px] text-sm outline-none bg-transparent py-0.5"
+                placeholder={form.tags.length === 0 ? '輸入標籤後按 Enter' : ''}
+                list="tag-suggestions"
+                data-1p-ignore
+                autoComplete="off"
+              />
+            </div>
             <datalist id="tag-suggestions">
               {tagSuggestions.map(t => <option key={t} value={t} />)}
             </datalist>
