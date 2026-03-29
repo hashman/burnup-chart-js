@@ -285,3 +285,41 @@ def test_missing_project_returns_404(client: TestClient) -> None:
         "/api/projects/does-not-exist/tasks", json={"name": "Ghost Task", "points": 1}
     )
     assert response.status_code == 404
+
+
+def test_statuses_table_exists(client: TestClient) -> None:
+    """Verify that the statuses table is created on startup."""
+    with db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='statuses'"
+        ).fetchone()
+    assert row is not None
+    assert row["name"] == "statuses"
+
+
+def test_default_statuses_seeded(client: TestClient) -> None:
+    """Verify that 3 default statuses are seeded on startup."""
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM statuses ORDER BY sort_order"
+        ).fetchall()
+    assert len(rows) == 3
+    assert rows[0]["name"] == "待辦"
+    assert rows[0]["is_default_start"] == 1
+    assert rows[0]["is_default_end"] == 0
+    assert rows[1]["name"] == "進行中"
+    assert rows[1]["is_default_start"] == 0
+    assert rows[1]["is_default_end"] == 0
+    assert rows[2]["name"] == "已完成"
+    assert rows[2]["is_default_start"] == 0
+    assert rows[2]["is_default_end"] == 1
+
+
+def test_todos_table_exists(client: TestClient) -> None:
+    """Verify that the todos table is created on startup."""
+    with db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='todos'"
+        ).fetchone()
+    assert row is not None
+    assert row["name"] == "todos"
