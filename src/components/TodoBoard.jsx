@@ -10,8 +10,8 @@ export default function TodoBoard({
   onCreateComment, onUpdateComment, onDeleteComment,
   initialEditTodoId, onClearInitialEditTodoId,
 }) {
-  const [editingTodoId, setEditingTodoId] = useState(null);
-  const [showFormModal, setShowFormModal] = useState(false);
+  const [editingTodoId, setEditingTodoId] = useState(initialEditTodoId || null);
+  const [showFormModal, setShowFormModal] = useState(!!initialEditTodoId);
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverColumn, setDragOverColumn] = useState(null);
   const [hideDone, setHideDone] = useState(false);
@@ -43,9 +43,7 @@ export default function TodoBoard({
   const editingTodo = useMemo(() => editingTodoId ? todos.find(t => t.id === editingTodoId) || null : null, [editingTodoId, todos]);
 
   useEffect(() => {
-    if (initialEditTodoId) {
-      setEditingTodoId(initialEditTodoId);
-      setShowFormModal(true);
+    if (initialEditTodoId && onClearInitialEditTodoId) {
       onClearInitialEditTodoId();
     }
   }, [initialEditTodoId]);
@@ -442,6 +440,7 @@ export default function TodoBoard({
       {/* Form Modal */}
       {showFormModal && (
         <TodoFormModal
+          key={editingTodoId || 'new'}
           todo={editingTodo}
           statuses={statuses}
           allTasks={allTasks}

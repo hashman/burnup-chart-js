@@ -1,37 +1,23 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { X, Trash2, Send, Pencil, Check } from 'lucide-react';
 
 export default function TodoFormModal({ todo, statuses, allTasks, projects, allTags, allAssignees, onSave, onDelete, onClose, onCreateComment, onUpdateComment, onDeleteComment }) {
   const isEdit = !!todo;
   const startStatus = statuses.find(s => s.isDefaultStart);
 
-  const [form, setForm] = useState({
-    title: '',
-    status: startStatus ? startStatus.id : '',
-    priority: 'medium',
-    dueDate: '',
-    assignee: '',
-    tags: [],
+  const initialForm = useMemo(() => ({
+    title: todo?.title || '',
+    status: todo?.status || (startStatus ? startStatus.id : ''),
+    priority: todo?.priority || 'medium',
+    dueDate: todo?.dueDate || '',
+    assignee: todo?.assignee || '',
+    tags: todo?.tags || [],
     tagInput: '',
-    note: '',
-    linkedTaskId: '',
-  });
+    note: todo?.note || '',
+    linkedTaskId: todo?.linkedTaskId || '',
+  }), [todo, startStatus]);
 
-  useEffect(() => {
-    if (todo) {
-      setForm({
-        title: todo.title || '',
-        status: todo.status || (startStatus ? startStatus.id : ''),
-        priority: todo.priority || 'medium',
-        dueDate: todo.dueDate || '',
-        assignee: todo.assignee || '',
-        tags: todo.tags || [],
-        tagInput: '',
-        note: todo.note || '',
-        linkedTaskId: todo.linkedTaskId || '',
-      });
-    }
-  }, [todo]);
+  const [form, setForm] = useState(initialForm);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [commentInput, setCommentInput] = useState('');
