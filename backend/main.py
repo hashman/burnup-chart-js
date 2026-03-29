@@ -1,3 +1,4 @@
+import json as _json
 import os
 import sqlite3
 from datetime import datetime
@@ -214,6 +215,74 @@ class ProjectOut(BaseModel):
     tasks: List[TaskOut] = Field(default_factory=list)
 
 
+class StatusCreate(BaseModel):
+    id: Optional[str] = None
+    name: str
+    sort_order: Optional[float] = None
+
+
+class StatusUpdate(BaseModel):
+    name: Optional[str] = None
+    sort_order: Optional[float] = None
+    is_default_start: Optional[bool] = None
+    is_default_end: Optional[bool] = None
+
+
+class StatusOut(BaseModel):
+    id: str
+    name: str
+    sortOrder: float
+    isDefaultStart: bool
+    isDefaultEnd: bool
+
+
+class StatusReorderItem(BaseModel):
+    id: str
+    sortOrder: float
+
+
+class StatusDelete(BaseModel):
+    migrate_to: Optional[str] = None
+
+
+class TodoCreate(BaseModel):
+    id: Optional[str] = None
+    title: str
+    status: Optional[str] = None  # status id, defaults to start status at API level
+    priority: str = "medium"
+    dueDate: Optional[str] = None
+    assignee: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    note: Optional[str] = None
+    linkedTaskId: Optional[str] = None
+
+
+class TodoUpdate(BaseModel):
+    title: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    dueDate: Optional[str] = None
+    assignee: Optional[str] = None
+    tags: Optional[List[str]] = None
+    note: Optional[str] = None
+    linkedTaskId: Optional[str] = None
+    sortOrder: Optional[float] = None
+
+
+class TodoOut(BaseModel):
+    id: str
+    title: str
+    status: str
+    priority: str
+    dueDate: Optional[str] = None
+    assignee: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    note: Optional[str] = None
+    linkedTaskId: Optional[str] = None
+    createdAt: str
+    sortOrder: float
+
+
 @app.on_event("startup")
 def startup() -> None:
     """Initialize the application on startup.
@@ -347,6 +416,32 @@ def fetch_task(conn: sqlite3.Connection, task_id: str) -> Optional[TaskPayload]:
     ).fetchall()
     logs = [row_to_log(row) for row in log_rows]
     return row_to_task(task_row, logs)
+
+
+def row_to_status(row: sqlite3.Row) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "sortOrder": row["sort_order"],
+        "isDefaultStart": bool(row["is_default_start"]),
+        "isDefaultEnd": bool(row["is_default_end"]),
+    }
+
+
+def row_to_todo(row: sqlite3.Row) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "status": row["status"],
+        "priority": row["priority"],
+        "dueDate": normalize_text(row["due_date"]) or None,
+        "assignee": normalize_text(row["assignee"]) or None,
+        "tags": _json.loads(row["tags"]) if row["tags"] else [],
+        "note": normalize_text(row["note"]) or None,
+        "linkedTaskId": normalize_text(row["linked_task_id"]) or None,
+        "createdAt": row["created_at"],
+        "sortOrder": row["sort_order"],
+    }
 
 
 @app.get("/api/health")
