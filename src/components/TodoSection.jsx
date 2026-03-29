@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 
-export default function TodoSection({ todos, statuses, onToggleTodo, onNavigateToTodoTab }) {
-  const [expanded, setExpanded] = useState(false);
+export default function TodoSection({ todos, statuses, onToggleTodo, onNavigateToTodoTab, onEditTodo }) {
+  const [expanded, setExpanded] = useState(true);
 
   if (!todos || todos.length === 0) return null;
 
@@ -47,17 +47,20 @@ export default function TodoSection({ todos, statuses, onToggleTodo, onNavigateT
             {todos.map(todo => {
               const isDone = todo.status === endStatus?.id;
               return (
-                <label key={todo.id} className="flex items-center gap-2 text-sm cursor-pointer group">
+                <div key={todo.id} className="flex items-center gap-2 text-sm group">
                   <input
                     type="checkbox"
                     checked={isDone}
                     onChange={() => onToggleTodo(todo.id, isDone ? startStatus?.id : endStatus?.id)}
-                    className="accent-emerald-500"
+                    className="accent-emerald-500 cursor-pointer"
                   />
-                  <span className={isDone ? 'line-through text-gray-400' : 'text-gray-700 group-hover:text-gray-900'}>
+                  <span
+                    onClick={() => onEditTodo && onEditTodo(todo.id)}
+                    className={`cursor-pointer hover:text-indigo-600 ${isDone ? 'line-through text-gray-400' : 'text-gray-700'}`}
+                  >
                     {todo.title}
                   </span>
-                </label>
+                </div>
               );
             })}
           </div>
