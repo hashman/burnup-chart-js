@@ -323,9 +323,7 @@ def test_statuses_table_exists(client: TestClient) -> None:
 def test_default_statuses_seeded(client: TestClient) -> None:
     """Verify that 3 default statuses are seeded on startup."""
     with db.get_connection() as conn:
-        rows = conn.execute(
-            "SELECT * FROM statuses ORDER BY sort_order"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM statuses ORDER BY sort_order").fetchall()
     assert len(rows) == 3
     assert rows[0]["name"] == "待辦"
     assert rows[0]["is_default_start"] == 1
@@ -352,7 +350,10 @@ def test_todos_table_exists(client: TestClient) -> None:
 # Status CRUD helpers & tests
 # ---------------------------------------------------------------------------
 
-def create_status(client: TestClient, name: str, sort_order: float = None) -> Dict[str, Any]:
+
+def create_status(
+    client: TestClient, name: str, sort_order: float = None
+) -> Dict[str, Any]:
     payload: Dict[str, Any] = {"name": name}
     if sort_order is not None:
         payload["sort_order"] = sort_order
@@ -519,6 +520,7 @@ def test_reorder_statuses(client: TestClient) -> None:
 # Todo CRUD helpers & tests
 # ---------------------------------------------------------------------------
 
+
 def create_todo(client: TestClient, title: str, **kwargs: Any) -> Dict[str, Any]:
     payload: Dict[str, Any] = {"title": title}
     payload.update(kwargs)
@@ -530,7 +532,9 @@ def create_todo(client: TestClient, title: str, **kwargs: Any) -> Dict[str, Any]
 def test_todo_crud_flow(client: TestClient) -> None:
     """Create, list, update, delete flow for todos."""
     # Create with title + priority + tags
-    todo = create_todo(client, "Buy milk", priority="high", tags=["groceries", "urgent"])
+    todo = create_todo(
+        client, "Buy milk", priority="high", tags=["groceries", "urgent"]
+    )
     assert todo["title"] == "Buy milk"
     assert todo["priority"] == "high"
     assert todo["tags"] == ["groceries", "urgent"]
@@ -547,10 +551,13 @@ def test_todo_crud_flow(client: TestClient) -> None:
 
     # Update title + status
     other_status = [s for s in statuses if not s["isDefaultStart"]][0]
-    response = client.patch(f"/api/todos/{todo['id']}", json={
-        "title": "Buy oat milk",
-        "status": other_status["id"],
-    })
+    response = client.patch(
+        f"/api/todos/{todo['id']}",
+        json={
+            "title": "Buy oat milk",
+            "status": other_status["id"],
+        },
+    )
     assert response.status_code == 200
     updated = response.json()
     assert updated["title"] == "Buy oat milk"
@@ -586,19 +593,25 @@ def test_todo_with_explicit_status(client: TestClient) -> None:
 
 def test_todo_invalid_status_rejected(client: TestClient) -> None:
     """Creating with invalid status returns 400."""
-    response = client.post("/api/todos", json={
-        "title": "Bad status",
-        "status": "nonexistent",
-    })
+    response = client.post(
+        "/api/todos",
+        json={
+            "title": "Bad status",
+            "status": "nonexistent",
+        },
+    )
     assert response.status_code == 400
 
 
 def test_todo_update_invalid_status_rejected(client: TestClient) -> None:
     """Updating with invalid status returns 400."""
     todo = create_todo(client, "Will try bad update")
-    response = client.patch(f"/api/todos/{todo['id']}", json={
-        "status": "nonexistent",
-    })
+    response = client.patch(
+        f"/api/todos/{todo['id']}",
+        json={
+            "status": "nonexistent",
+        },
+    )
     assert response.status_code == 400
 
 
@@ -665,7 +678,9 @@ def test_todo_comment_crud(client: TestClient) -> None:
     todo = create_todo(client, "Commentable")
 
     # Create comment
-    resp = client.post(f"/api/todos/{todo['id']}/comments", json={"content": "First note"})
+    resp = client.post(
+        f"/api/todos/{todo['id']}/comments", json={"content": "First note"}
+    )
     assert resp.status_code == 201
     comment = resp.json()
     assert comment["content"] == "First note"
@@ -679,7 +694,9 @@ def test_todo_comment_crud(client: TestClient) -> None:
     assert found["comments"][0]["id"] == comment["id"]
 
     # Update comment
-    resp = client.patch(f"/api/todo-comments/{comment['id']}", json={"content": "Updated note"})
+    resp = client.patch(
+        f"/api/todo-comments/{comment['id']}", json={"content": "Updated note"}
+    )
     assert resp.status_code == 200
     updated = resp.json()
     assert updated["content"] == "Updated note"

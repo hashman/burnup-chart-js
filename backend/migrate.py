@@ -34,9 +34,7 @@ def migration(name: str):
 def add_progress_column(conn: sqlite3.Connection) -> None:
     columns = {row[1] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
     if "progress" not in columns:
-        conn.execute(
-            "ALTER TABLE tasks ADD COLUMN progress INTEGER NOT NULL DEFAULT 0"
-        )
+        conn.execute("ALTER TABLE tasks ADD COLUMN progress INTEGER NOT NULL DEFAULT 0")
 
 
 @migration("create statuses table")

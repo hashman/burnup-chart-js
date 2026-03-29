@@ -459,7 +459,9 @@ def row_to_todo_comment(row: sqlite3.Row) -> Dict[str, Any]:
     }
 
 
-def row_to_todo(row: sqlite3.Row, comments: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+def row_to_todo(
+    row: sqlite3.Row, comments: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
     return {
         "id": row["id"],
         "title": row["title"],
@@ -689,7 +691,7 @@ def create_task(project_id: str, payload: TaskCreate) -> TaskPayload:
                 1 if payload.showLabel else 0,
                 payload.progress,
                 now,
-            )
+            ),
         )
         conn.commit()
         task = fetch_task(conn, task_id)
@@ -857,9 +859,7 @@ def delete_log(log_id: str) -> None:
 def list_statuses() -> List[Dict[str, Any]]:
     """Return all statuses ordered by sort_order."""
     with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT * FROM statuses ORDER BY sort_order"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM statuses ORDER BY sort_order").fetchall()
     return [row_to_status(row) for row in rows]
 
 
@@ -1021,9 +1021,7 @@ def reorder_statuses(items: List[StatusReorderItem]) -> List[Dict[str, Any]]:
                 (item.sortOrder, item.id),
             )
         conn.commit()
-        rows = conn.execute(
-            "SELECT * FROM statuses ORDER BY sort_order"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM statuses ORDER BY sort_order").fetchall()
     return [row_to_status(row) for row in rows]
 
 
@@ -1032,7 +1030,9 @@ def reorder_statuses(items: List[StatusReorderItem]) -> List[Dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def _fetch_todo_comments(conn: sqlite3.Connection, todo_ids: List[str]) -> Dict[str, List[Dict[str, Any]]]:
+def _fetch_todo_comments(
+    conn: sqlite3.Connection, todo_ids: List[str]
+) -> Dict[str, List[Dict[str, Any]]]:
     """Fetch comments for a list of todo IDs, grouped by todo_id."""
     if not todo_ids:
         return {}
@@ -1093,10 +1093,17 @@ def create_todo(payload: TodoCreate) -> Dict[str, Any]:
                tags, note, linked_task_id, created_at, sort_order)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                todo_id, payload.title, resolved_status, payload.priority,
-                payload.dueDate or "", payload.assignee or "",
-                _json.dumps(payload.tags), payload.note or "",
-                payload.linkedTaskId or None, now, 0,
+                todo_id,
+                payload.title,
+                resolved_status,
+                payload.priority,
+                payload.dueDate or "",
+                payload.assignee or "",
+                _json.dumps(payload.tags),
+                payload.note or "",
+                payload.linkedTaskId or None,
+                now,
+                0,
             ),
         )
         conn.commit()
@@ -1152,14 +1159,13 @@ def update_todo(todo_id: str, payload: TodoUpdate) -> Dict[str, Any]:
 
         if fields:
             values.append(todo_id)
-            conn.execute(
-                f"UPDATE todos SET {', '.join(fields)} WHERE id = ?", values
-            )
+            conn.execute(f"UPDATE todos SET {', '.join(fields)} WHERE id = ?", values)
             conn.commit()
 
         row = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
         comments = conn.execute(
-            "SELECT * FROM todo_comments WHERE todo_id = ? ORDER BY created_at", (todo_id,)
+            "SELECT * FROM todo_comments WHERE todo_id = ? ORDER BY created_at",
+            (todo_id,),
         ).fetchall()
     return row_to_todo(row, [row_to_todo_comment(c) for c in comments])
 
@@ -1203,7 +1209,9 @@ def create_todo_comment(todo_id: str, payload: TodoCommentCreate) -> Dict[str, A
     comment_id = f"tc_{uuid4().hex}"
     now = utc_now()
     with get_connection() as conn:
-        todo_row = conn.execute("SELECT 1 FROM todos WHERE id = ?", (todo_id,)).fetchone()
+        todo_row = conn.execute(
+            "SELECT 1 FROM todos WHERE id = ?", (todo_id,)
+        ).fetchone()
         if not todo_row:
             raise HTTPException(status_code=404, detail="Todo not found")
         conn.execute(
@@ -1211,7 +1219,9 @@ def create_todo_comment(todo_id: str, payload: TodoCommentCreate) -> Dict[str, A
             (comment_id, todo_id, payload.content, now, now),
         )
         conn.commit()
-        row = conn.execute("SELECT * FROM todo_comments WHERE id = ?", (comment_id,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM todo_comments WHERE id = ?", (comment_id,)
+        ).fetchone()
     return row_to_todo_comment(row)
 
 
@@ -1220,7 +1230,9 @@ def update_todo_comment(comment_id: str, payload: TodoCommentUpdate) -> Dict[str
     """Update a todo comment."""
     now = utc_now()
     with get_connection() as conn:
-        existing = conn.execute("SELECT 1 FROM todo_comments WHERE id = ?", (comment_id,)).fetchone()
+        existing = conn.execute(
+            "SELECT 1 FROM todo_comments WHERE id = ?", (comment_id,)
+        ).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Comment not found")
         conn.execute(
@@ -1228,7 +1240,9 @@ def update_todo_comment(comment_id: str, payload: TodoCommentUpdate) -> Dict[str
             (payload.content, now, comment_id),
         )
         conn.commit()
-        row = conn.execute("SELECT * FROM todo_comments WHERE id = ?", (comment_id,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM todo_comments WHERE id = ?", (comment_id,)
+        ).fetchone()
     return row_to_todo_comment(row)
 
 
