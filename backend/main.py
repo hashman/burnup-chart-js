@@ -991,6 +991,145 @@ def reorder_statuses(items: List[StatusReorderItem]) -> List[Dict[str, Any]]:
     return [row_to_status(row) for row in rows]
 
 
+# ---------------------------------------------------------------------------
+# Todo CRUD endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/todos", response_model=List[TodoOut])
+def list_todos() -> List[Dict[str, Any]]:
+    """Return all todos ordered by sort_order, created_at."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM todos ORDER BY sort_order, created_at"
+        ).fetchall()
+    return [row_to_todo(row) for row in rows]
+
+
+@app.post("/api/todos", response_model=TodoOut, status_code=status.HTTP_201_CREATED)
+def create_todo(payload: TodoCreate) -> Dict[str, Any]:
+    """Create a new todo with status validation."""
+    todo_id = payload.id or f"todo_{uuid4().hex}"
+    now = utc_now()
+
+    with get_connection() as conn:
+        # Resolve status
+        if payload.status:
+            valid = conn.execute(
+                "SELECT 1 FROM statuses WHERE id = ?", (payload.status,)
+            ).fetchone()
+            if not valid:
+                raise HTTPException(status_code=400, detail="Invalid status id")
+            resolved_status = payload.status
+        else:
+            start_row = conn.execute(
+                "SELECT id FROM statuses WHERE is_default_start = 1"
+            ).fetchone()
+            resolved_status = start_row["id"]
+
+        # Validate linked task
+        if payload.linkedTaskId:
+            task_row = conn.execute(
+                "SELECT 1 FROM tasks WHERE id = ?", (payload.linkedTaskId,)
+            ).fetchone()
+            if not task_row:
+                raise HTTPException(status_code=404, detail="Linked task not found")
+
+        conn.execute(
+            """INSERT INTO todos (id, title, status, priority, due_date, assignee,
+               tags, note, linked_task_id, created_at, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                todo_id, payload.title, resolved_status, payload.priority,
+                payload.dueDate or "", payload.assignee or "",
+                _json.dumps(payload.tags), payload.note or "",
+                payload.linkedTaskId or None, now, 0,
+            ),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
+    return row_to_todo(row)
+
+
+@app.patch("/api/todos/{todo_id}", response_model=TodoOut)
+def update_todo(todo_id: str, payload: TodoUpdate) -> Dict[str, Any]:
+    """Update a todo by id with status validation."""
+    with get_connection() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM todos WHERE id = ?", (todo_id,)
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Todo not found")
+
+        fields: List[str] = []
+        values: List[Any] = []
+
+        if payload.title is not None:
+            fields.append("title = ?")
+            values.append(payload.title)
+        if payload.status is not None:
+            valid = conn.execute(
+                "SELECT 1 FROM statuses WHERE id = ?", (payload.status,)
+            ).fetchone()
+            if not valid:
+                raise HTTPException(status_code=400, detail="Invalid status id")
+            fields.append("status = ?")
+            values.append(payload.status)
+        if payload.priority is not None:
+            fields.append("priority = ?")
+            values.append(payload.priority)
+        if payload.dueDate is not None:
+            fields.append("due_date = ?")
+            values.append(payload.dueDate)
+        if payload.assignee is not None:
+            fields.append("assignee = ?")
+            values.append(payload.assignee)
+        if payload.tags is not None:
+            fields.append("tags = ?")
+            values.append(_json.dumps(payload.tags))
+        if payload.note is not None:
+            fields.append("note = ?")
+            values.append(payload.note)
+        if payload.linkedTaskId is not None:
+            fields.append("linked_task_id = ?")
+            values.append(payload.linkedTaskId)
+        if payload.sortOrder is not None:
+            fields.append("sort_order = ?")
+            values.append(payload.sortOrder)
+
+        if fields:
+            values.append(todo_id)
+            conn.execute(
+                f"UPDATE todos SET {', '.join(fields)} WHERE id = ?", values
+            )
+            conn.commit()
+
+        row = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
+    return row_to_todo(row)
+
+
+@app.delete("/api/todos/{todo_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_todo(todo_id: str) -> None:
+    """Delete a todo by id."""
+    with get_connection() as conn:
+        result = conn.execute("DELETE FROM todos WHERE id = ?", (todo_id,))
+        conn.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    return None
+
+
+@app.get("/api/tasks/{task_id}/todos", response_model=List[TodoOut])
+def list_task_todos(task_id: str) -> List[Dict[str, Any]]:
+    """Return all todos linked to a specific task."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM todos WHERE linked_task_id = ? ORDER BY sort_order, created_at",
+            (task_id,),
+        ).fetchall()
+    return [row_to_todo(row) for row in rows]
+
+
 if __name__ == "__main__":
     import uvicorn
 

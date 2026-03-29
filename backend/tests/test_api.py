@@ -490,3 +490,136 @@ def test_reorder_statuses(client: TestClient) -> None:
     assert result[0]["name"] == "已完成"
     assert result[1]["name"] == "進行中"
     assert result[2]["name"] == "待辦"
+
+
+# ---------------------------------------------------------------------------
+# Todo CRUD helpers & tests
+# ---------------------------------------------------------------------------
+
+def create_todo(client: TestClient, title: str, **kwargs: Any) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {"title": title}
+    payload.update(kwargs)
+    response = client.post("/api/todos", json=payload)
+    assert response.status_code == 201
+    return response.json()
+
+
+def test_todo_crud_flow(client: TestClient) -> None:
+    """Create, list, update, delete flow for todos."""
+    # Create with title + priority + tags
+    todo = create_todo(client, "Buy milk", priority="high", tags=["groceries", "urgent"])
+    assert todo["title"] == "Buy milk"
+    assert todo["priority"] == "high"
+    assert todo["tags"] == ["groceries", "urgent"]
+    assert todo["id"].startswith("todo_")
+    # status should be the default start status ID (not a hardcoded string)
+    statuses = client.get("/api/statuses").json()
+    start_status = [s for s in statuses if s["isDefaultStart"]][0]
+    assert todo["status"] == start_status["id"]
+
+    # List
+    response = client.get("/api/todos")
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+    # Update title + status
+    other_status = [s for s in statuses if not s["isDefaultStart"]][0]
+    response = client.patch(f"/api/todos/{todo['id']}", json={
+        "title": "Buy oat milk",
+        "status": other_status["id"],
+    })
+    assert response.status_code == 200
+    updated = response.json()
+    assert updated["title"] == "Buy oat milk"
+    assert updated["status"] == other_status["id"]
+
+    # Delete
+    response = client.delete(f"/api/todos/{todo['id']}")
+    assert response.status_code == 204
+
+    # Verify gone
+    response = client.get("/api/todos")
+    assert response.status_code == 200
+    assert len(response.json()) == 0
+
+
+def test_todo_default_status_is_start(client: TestClient) -> None:
+    """Creating without explicit status uses start status ID."""
+    statuses = client.get("/api/statuses").json()
+    start_status = [s for s in statuses if s["isDefaultStart"]][0]
+
+    todo = create_todo(client, "No status specified")
+    assert todo["status"] == start_status["id"]
+
+
+def test_todo_with_explicit_status(client: TestClient) -> None:
+    """Creating with valid status ID works."""
+    statuses = client.get("/api/statuses").json()
+    chosen = statuses[1]  # pick the middle one
+
+    todo = create_todo(client, "Explicit status", status=chosen["id"])
+    assert todo["status"] == chosen["id"]
+
+
+def test_todo_invalid_status_rejected(client: TestClient) -> None:
+    """Creating with invalid status returns 400."""
+    response = client.post("/api/todos", json={
+        "title": "Bad status",
+        "status": "nonexistent",
+    })
+    assert response.status_code == 400
+
+
+def test_todo_update_invalid_status_rejected(client: TestClient) -> None:
+    """Updating with invalid status returns 400."""
+    todo = create_todo(client, "Will try bad update")
+    response = client.patch(f"/api/todos/{todo['id']}", json={
+        "status": "nonexistent",
+    })
+    assert response.status_code == 400
+
+
+def test_todo_linked_to_task(client: TestClient) -> None:
+    """Can link to burnup tasks, GET /api/tasks/:id/todos works."""
+    project = create_project(client, "Link Project")
+    task = create_task(client, project["id"], "Link Task")
+
+    todo = create_todo(client, "Linked todo", linkedTaskId=task["id"])
+    assert todo["linkedTaskId"] == task["id"]
+
+    # GET /api/tasks/:id/todos
+    response = client.get(f"/api/tasks/{task['id']}/todos")
+    assert response.status_code == 200
+    todos = response.json()
+    assert len(todos) == 1
+    assert todos[0]["id"] == todo["id"]
+
+
+def test_todo_unlinked_when_task_deleted(client: TestClient) -> None:
+    """linkedTaskId cleared when task deleted (ON DELETE SET NULL)."""
+    project = create_project(client, "Unlink Project")
+    task = create_task(client, project["id"], "Unlink Task")
+
+    todo = create_todo(client, "Will be unlinked", linkedTaskId=task["id"])
+    assert todo["linkedTaskId"] == task["id"]
+
+    # Delete the task
+    response = client.delete(f"/api/tasks/{task['id']}")
+    assert response.status_code == 204
+
+    # Todo should still exist but linkedTaskId is None
+    response = client.get("/api/todos")
+    assert response.status_code == 200
+    todos = response.json()
+    found = [t for t in todos if t["id"] == todo["id"]]
+    assert len(found) == 1
+    assert found[0]["linkedTaskId"] is None
+
+
+def test_todo_not_found(client: TestClient) -> None:
+    """PATCH/DELETE return 404 for missing todo."""
+    response = client.patch("/api/todos/nonexistent", json={"title": "X"})
+    assert response.status_code == 404
+
+    response = client.delete("/api/todos/nonexistent")
+    assert response.status_code == 404
