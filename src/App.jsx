@@ -2687,14 +2687,14 @@ export default function BurnupChartApp() {
                                 {/* Actual / Todo Progress Bar */}
                                 {(() => {
                                   const tp = todoProgressByTask[task.id];
+                                  const taskTodos = tp ? todos.filter(t => t.linkedTaskId === task.id) : [];
                                   const pct = tp ? Math.round((tp.done / tp.total) * 100) : actualPct;
-                                  const label = tp ? `Todo 進度 (${tp.done}/${tp.total})` : `完成度 ${pct}%`;
                                   const barColor = pct === 100 ? 'bg-emerald-500' : tp ? 'bg-amber-400' : 'bg-indigo-400';
                                   const textColor = pct === 100 ? 'text-emerald-600 font-bold' : tp ? 'text-amber-500' : 'text-indigo-500';
                                   return (
-                                    <div className="flex items-center gap-1" title={label}>
+                                    <div className="relative flex items-center gap-1 group/prog">
                                       {tp ? (
-                                        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden flex-1">
+                                        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden flex-1 cursor-pointer">
                                           <div className={`h-full ${barColor}`} style={{ width: `${pct}%` }} />
                                         </div>
                                       ) : (
@@ -2710,6 +2710,24 @@ export default function BurnupChartApp() {
                                         />
                                       )}
                                       <span className={`text-[10px] font-mono w-6 text-right ${textColor}`}>{pct}%</span>
+                                      {tp && taskTodos.length > 0 && (
+                                        <div className="hidden group-hover/prog:block absolute top-full left-0 mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-2 w-56">
+                                          <div className="text-[10px] text-gray-400 mb-1 font-semibold">Todo ({tp.done}/{tp.total})</div>
+                                          <div className="flex flex-col gap-0.5 max-h-32 overflow-y-auto">
+                                            {taskTodos.map(td => {
+                                              const isDone = td.status === endStatusId;
+                                              return (
+                                                <div key={td.id} className="flex items-center gap-1.5 text-xs">
+                                                  <span className={`w-3 h-3 rounded-sm border flex items-center justify-center shrink-0 ${isDone ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300'}`}>
+                                                    {isDone && <Check size={8} />}
+                                                  </span>
+                                                  <span className={isDone ? 'line-through text-gray-400' : 'text-gray-700'}>{td.title}</span>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })()}
