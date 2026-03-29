@@ -2726,6 +2726,12 @@ export default function BurnupChartApp() {
                                               );
                                             })}
                                           </div>
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); setActiveProjectId(TODO_TAB_ID); }}
+                                            className="mt-1.5 pt-1.5 border-t border-gray-100 w-full text-[10px] text-indigo-500 hover:text-indigo-700 font-semibold text-left"
+                                          >
+                                            前往 Todo Tab →
+                                          </button>
                                         </div>
                                       )}
                                     </div>
