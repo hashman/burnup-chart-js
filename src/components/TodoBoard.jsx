@@ -14,11 +14,20 @@ export default function TodoBoard({
   const [dragOverColumn, setDragOverColumn] = useState(null);
   const [hideDone, setHideDone] = useState(false);
 
-  // Filters
-  const [filterAssignee, setFilterAssignee] = useState('');
-  const [filterPriority, setFilterPriority] = useState('');
-  const [filterTag, setFilterTag] = useState('');
+  // Filters (multi-select: Sets)
+  const [filterAssignees, setFilterAssignees] = useState(new Set());
+  const [filterPriorities, setFilterPriorities] = useState(new Set());
+  const [filterTags, setFilterTags] = useState(new Set());
   const [showFilters, setShowFilters] = useState(false);
+
+  const toggleFilter = (setter, value) => {
+    setter(prev => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  };
 
   // Column editing state
   const [editingColumnId, setEditingColumnId] = useState(null);
@@ -40,12 +49,12 @@ export default function TodoBoard({
 
   const filteredTodos = useMemo(() => {
     return todos.filter(t => {
-      if (filterAssignee && t.assignee !== filterAssignee) return false;
-      if (filterPriority && t.priority !== filterPriority) return false;
-      if (filterTag && !(t.tags || []).includes(filterTag)) return false;
+      if (filterAssignees.size > 0 && !filterAssignees.has(t.assignee || '')) return false;
+      if (filterPriorities.size > 0 && !filterPriorities.has(t.priority)) return false;
+      if (filterTags.size > 0 && !(t.tags || []).some(tag => filterTags.has(tag))) return false;
       return true;
     });
-  }, [todos, filterAssignee, filterPriority, filterTag]);
+  }, [todos, filterAssignees, filterPriorities, filterTags]);
 
   const columnTodos = useMemo(() => {
     const grouped = {};
@@ -188,7 +197,7 @@ export default function TodoBoard({
     setEditingTodo(null);
   };
 
-  const hasActiveFilters = filterAssignee || filterPriority || filterTag;
+  const hasActiveFilters = filterAssignees.size > 0 || filterPriorities.size > 0 || filterTags.size > 0;
   const endStatus = statuses.find(s => s.isDefaultEnd);
   const endStatusName = endStatus ? endStatus.name : '已完成';
 
@@ -211,7 +220,7 @@ export default function TodoBoard({
           </button>
           {hasActiveFilters && (
             <button
-              onClick={() => { setFilterAssignee(''); setFilterPriority(''); setFilterTag(''); }}
+              onClick={() => { setFilterAssignees(new Set()); setFilterPriorities(new Set()); setFilterTags(new Set()); }}
               className="text-xs text-gray-400 hover:text-gray-600"
             >
               清除篩選
@@ -229,21 +238,37 @@ export default function TodoBoard({
 
       {/* Filter bar */}
       {showFilters && (
-        <div className="flex gap-3 items-center bg-gray-50 p-3 rounded-lg border border-gray-200">
-          <select value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)} className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 outline-none focus:border-indigo-500">
-            <option value="">所有指派人</option>
-            {allAssignees.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-          <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)} className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 outline-none focus:border-indigo-500">
-            <option value="">所有優先級</option>
-            <option value="high">高</option>
-            <option value="medium">中</option>
-            <option value="low">低</option>
-          </select>
-          <select value={filterTag} onChange={e => setFilterTag(e.target.value)} className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 outline-none focus:border-indigo-500">
-            <option value="">所有標籤</option>
-            {allTags.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
+        <div className="flex flex-col gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+          {/* Assignee */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-medium text-gray-500 w-14 shrink-0">指派人</span>
+            {allAssignees.map(a => (
+              <label key={a} className={`flex items-center gap-1 text-sm px-2 py-1 rounded-lg border cursor-pointer transition ${filterAssignees.has(a) ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                <input type="checkbox" checked={filterAssignees.has(a)} onChange={() => toggleFilter(setFilterAssignees, a)} className="sr-only" />
+                {a}
+              </label>
+            ))}
+          </div>
+          {/* Priority */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-medium text-gray-500 w-14 shrink-0">優先級</span>
+            {[['high', '高'], ['medium', '中'], ['low', '低']].map(([val, label]) => (
+              <label key={val} className={`flex items-center gap-1 text-sm px-2 py-1 rounded-lg border cursor-pointer transition ${filterPriorities.has(val) ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                <input type="checkbox" checked={filterPriorities.has(val)} onChange={() => toggleFilter(setFilterPriorities, val)} className="sr-only" />
+                {label}
+              </label>
+            ))}
+          </div>
+          {/* Tags */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-medium text-gray-500 w-14 shrink-0">標籤</span>
+            {allTags.map(t => (
+              <label key={t} className={`flex items-center gap-1 text-sm px-2 py-1 rounded-lg border cursor-pointer transition ${filterTags.has(t) ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'}`}>
+                <input type="checkbox" checked={filterTags.has(t)} onChange={() => toggleFilter(setFilterTags, t)} className="sr-only" />
+                {t}
+              </label>
+            ))}
+          </div>
         </div>
       )}
 
