@@ -1593,6 +1593,7 @@ export default function BurnupChartApp() {
   };
 
   // Reusable Chart Component Function
+  const todayStr = new Date().toISOString().slice(0, 10);
   const renderChart = (height = "100%") => (
     <ResponsiveContainer width="100%" height={height}>
       <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
@@ -1632,6 +1633,13 @@ export default function BurnupChartApp() {
           strokeWidth={3}
           dot={{ r: 3, fill: '#10b981' }}
           activeDot={{ r: 6 }}
+        />
+
+        <ReferenceLine
+          x={todayStr}
+          stroke="#f59e0b"
+          strokeDasharray="4 4"
+          strokeWidth={1.5}
         />
 
         {chartAnnotations.map(anno => (
