@@ -38,6 +38,20 @@ app.include_router(todos.router)
 def startup() -> None:
     init_db()
     cleanup_expired_tokens()
+    if os.environ.get("BURNUP_BACKUP_ENABLED", "").lower() in ("1", "true", "yes"):
+        from backup import run_backup, start_backup_scheduler
+
+        run_backup()
+        start_backup_scheduler()
+
+
+@app.on_event("shutdown")
+def shutdown() -> None:
+    """Shut down background services."""
+    if os.environ.get("BURNUP_BACKUP_ENABLED", "").lower() in ("1", "true", "yes"):
+        from backup import shutdown_backup_scheduler
+
+        shutdown_backup_scheduler()
 
 
 @app.get("/api/health")

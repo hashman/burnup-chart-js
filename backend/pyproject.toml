@@ -14,6 +14,7 @@ pandas = "^2.3.3"
 python-jose = {version = "^3.3.0", extras = ["cryptography"]}
 bcrypt = "^5.0.0"
 python-multipart = "^0.0.12"
+apscheduler = "^3.10"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
