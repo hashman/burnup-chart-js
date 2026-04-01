@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, ComposedChart, ReferenceLine, ReferenceDot, Label } from 'recharts';
-import { Upload, Download, Plus, Trash2, Calendar, User, Layout, Briefcase, AlertTriangle, CheckCircle2, Filter, Lock, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, Eye, EyeOff, Settings, Percent, MessageSquare, X, Send, Tag, Maximize2, Minimize2, Check, BarChart2, TrendingUp, Clock } from 'lucide-react';
+import { Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, ReferenceLine, ReferenceDot, Label } from 'recharts';
+import { Upload, Download, Plus, Trash2, Calendar, User, Briefcase, AlertTriangle, CheckCircle2, Filter, Lock, ChevronLeft, Eye, EyeOff, Settings, Percent, MessageSquare, X, Send, Tag, Maximize2, Minimize2, BarChart2, TrendingUp, Clock } from 'lucide-react';
 import Holidays from 'date-holidays';
 
 // --- Utility Functions ---
@@ -402,7 +402,7 @@ export default function BurnupChartApp() {
   const [newLogContent, setNewLogContent] = useState("");
   const [newLogDate, setNewLogDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const { getExpectedEndDate, getExpectedPoints, loading: holidayLoading } = useTaiwanCalendar();
+  const { getExpectedEndDate, getExpectedPoints, loading: _holidayLoading } = useTaiwanCalendar();
 
   const [newTask, setNewTask] = useState({
     name: "",
@@ -438,7 +438,7 @@ export default function BurnupChartApp() {
           setActiveProjectId(created.id);
           setApiAvailable(true);
         }
-      } catch (err) {
+      } catch (_err) {
         if (!isActive) return;
         setApiAvailable(false);
       } finally {
@@ -786,8 +786,8 @@ export default function BurnupChartApp() {
     normalizedTasks.forEach(t => {
       if (t.showLabel) {
         // Decide which date to attach the label to.
-        // Priority: Actual End > Actual Start > Expected Start > Added Date > Expected End
-        const targetDate = t.actualEnd || t.actualStart || t.expectedStart || t.addedDate || t.expectedEnd;
+        // Priority: Actual End > Expected End > Actual Start > Expected Start > Added Date
+        const targetDate = t.actualEnd || t.expectedEnd || t.actualStart || t.expectedStart || t.addedDate;
         const normalizedTargetDate = normalizeDateString(targetDate);
         if (!normalizedTargetDate) return;
 
@@ -804,7 +804,8 @@ export default function BurnupChartApp() {
           ...t,
           x: point.date,
           y: yValue,
-          isActual: !!t.actualEnd
+          isActual: !!t.actualEnd,
+          isLast: point === data[data.length - 1]
         });
       }
     });
@@ -1148,7 +1149,7 @@ export default function BurnupChartApp() {
           }
           return p;
         }));
-      } catch (err) {
+      } catch (_err) {
         setApiAvailable(false);
         const fallbackTask = { ...taskPayload, id: generateId(), logs: [] };
         setProjects(prevProjects => prevProjects.map(p => {
@@ -1244,7 +1245,7 @@ export default function BurnupChartApp() {
           tasks: p.tasks.map(t => (t.id === taskId ? updatedTask : t))
         };
       }));
-    } catch (err) {
+    } catch (_err) {
       setApiAvailable(false);
     }
   };
@@ -1255,7 +1256,7 @@ export default function BurnupChartApp() {
     if (apiAvailable) {
       try {
         await requestJson(`/api/tasks/${taskId}`, { method: "DELETE" });
-      } catch (err) {
+      } catch (_err) {
         setApiAvailable(false);
       }
     }
@@ -1292,7 +1293,7 @@ export default function BurnupChartApp() {
           }
           return p;
         }));
-      } catch (err) {
+      } catch (_err) {
         setApiAvailable(false);
         const fallbackLog = {
           id: generateId(),
@@ -1344,7 +1345,7 @@ export default function BurnupChartApp() {
     if (apiAvailable) {
       try {
         await requestJson(`/api/logs/${logId}`, { method: "DELETE" });
-      } catch (err) {
+      } catch (_err) {
         setApiAvailable(false);
       }
     }
@@ -1377,7 +1378,7 @@ export default function BurnupChartApp() {
         });
         setProjects(prevProjects => [...prevProjects, createdProject]);
         setActiveProjectId(createdProject.id);
-      } catch (err) {
+      } catch (_err) {
         setApiAvailable(false);
         const newProj = { id: generateId(), name: projectName, tasks: [] };
         setProjects(prevProjects => [...prevProjects, newProj]);
@@ -1428,7 +1429,7 @@ export default function BurnupChartApp() {
           }
           return p;
         }));
-      } catch (err) {
+      } catch (_err) {
         setApiAvailable(false);
         setProjects(prevProjects => prevProjects.map(p => {
           if (p.id === projectId) {
@@ -1483,7 +1484,7 @@ export default function BurnupChartApp() {
     if (apiAvailable) {
       try {
         await requestJson(`/api/projects/${projId}`, { method: "DELETE" });
-      } catch (err) {
+      } catch (_err) {
         setApiAvailable(false);
       }
     }
@@ -1546,7 +1547,7 @@ export default function BurnupChartApp() {
               }
               return p;
             }));
-          } catch (err) {
+          } catch (_err) {
             setApiAvailable(false);
             setProjects(prevProjects => prevProjects.map(p => {
               if (p.id === activeProjectId) {
@@ -1563,7 +1564,7 @@ export default function BurnupChartApp() {
             return p;
           }));
         }
-      } catch (err) {
+      } catch (_err) {
         alert("CSV 解析失敗。");
       }
     };
@@ -1654,7 +1655,7 @@ export default function BurnupChartApp() {
           >
             <Label
               value={anno.name}
-              position="top"
+              position={anno.isLast ? "left" : "top"}
               offset={10}
               style={{ fontSize: '10px', fill: '#4b5563', fontWeight: 'bold', pointerEvents: 'none' }}
             />
