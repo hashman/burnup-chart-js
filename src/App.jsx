@@ -511,6 +511,24 @@ function BurnupChartInner({ showAdminPanel, setShowAdminPanel }) {
     };
   }, []);
 
+  // Refetch statuses & todos when switching to the Todo tab
+  useEffect(() => {
+    if (activeProjectId !== TODO_TAB_ID || !apiAvailable) return;
+    let isActive = true;
+    (async () => {
+      try {
+        const [statusData, todoData] = await Promise.all([
+          requestJson("/api/statuses"),
+          requestJson("/api/todos"),
+        ]);
+        if (!isActive) return;
+        setStatuses(Array.isArray(statusData) ? statusData : []);
+        setTodos(Array.isArray(todoData) ? todoData : []);
+      } catch {}
+    })();
+    return () => { isActive = false; };
+  }, [activeProjectId, apiAvailable]);
+
   const fileInputRef = useRef(null);
 
   // 批次更新甘特圖任務日期（拖拉用）

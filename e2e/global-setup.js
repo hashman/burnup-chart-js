@@ -1,10 +1,26 @@
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { TEST_BACKEND_PORT, TEST_FRONTEND_PORT } from './test-config.js';
 
 const TEST_DB_PATH = resolve(import.meta.dirname, '..', 'backend', 'data', 'test.sqlite3');
 const BACKEND_URL = `http://127.0.0.1:${TEST_BACKEND_PORT}`;
+
+/** Kill any process listening on the given port. */
+function killPort(port) {
+  try {
+    const out = execFileSync('lsof', ['-ti', `:${port}`], { encoding: 'utf-8' }).trim();
+    if (out) {
+      for (const pid of out.split('\n')) {
+        try { process.kill(Number(pid), 'SIGTERM'); } catch {}
+      }
+      // Give processes a moment to exit
+      execFileSync('sleep', ['1']);
+    }
+  } catch {
+    // No process on this port — nothing to do
+  }
+}
 
 /** Wait until the backend responds to health checks. */
 async function waitForBackend(url, timeoutMs = 15_000) {
@@ -22,7 +38,8 @@ async function waitForBackend(url, timeoutMs = 15_000) {
 }
 
 export default async function globalSetup() {
-  // 1. Remove stale test DB to ensure a clean state
+  // 1. Kill stale processes and remove stale test DB
+  killPort(TEST_BACKEND_PORT);
   await rm(TEST_DB_PATH, { force: true });
 
   // 2. Start backend with test DB

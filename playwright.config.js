@@ -20,7 +20,7 @@ export default defineConfig({
   webServer: {
     command: `VITE_API_BASE_URL=http://127.0.0.1:${TEST_BACKEND_PORT} npm run dev -- --host 127.0.0.1 --port ${TEST_FRONTEND_PORT} --strictPort`,
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });
