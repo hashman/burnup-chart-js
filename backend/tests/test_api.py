@@ -778,3 +778,344 @@ def test_viewer_cannot_create_project(client: TestClient, auth: Dict[str, str]) 
     # Viewer can list projects
     resp = client.get("/api/projects", headers=viewer_auth)
     assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Auth: bootstrap validation
+# ---------------------------------------------------------------------------
+
+
+def test_bootstrap_short_username(client: TestClient) -> None:
+    resp = client.post(
+        "/api/auth/bootstrap",
+        json={"username": "ab", "password": "password123"},
+    )
+    assert resp.status_code == 400
+
+
+def test_bootstrap_short_password(client: TestClient) -> None:
+    resp = client.post(
+        "/api/auth/bootstrap",
+        json={"username": "admin1", "password": "short"},
+    )
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Auth: login edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_login_nonexistent_user(client: TestClient) -> None:
+    client.post(
+        "/api/auth/bootstrap",
+        json={"username": "admin1", "password": "password123"},
+    )
+    resp = client.post(
+        "/api/auth/login",
+        json={"username": "ghost", "password": "password123"},
+    )
+    assert resp.status_code == 401
+
+
+def test_login_inactive_user(client: TestClient, auth: Dict[str, str]) -> None:
+    # Create a user, then deactivate them
+    client.post(
+        "/api/auth/users",
+        json={
+            "username": "inactive1",
+            "display_name": "Inactive",
+            "password": "password123",
+            "role": "member",
+        },
+        headers=auth,
+    )
+    users = client.get("/api/auth/users", headers=auth).json()
+    user_id = next(u["id"] for u in users if u["username"] == "inactive1")
+
+    client.patch(
+        f"/api/auth/users/{user_id}",
+        json={"is_active": False},
+        headers=auth,
+    )
+
+    resp = client.post(
+        "/api/auth/login",
+        json={"username": "inactive1", "password": "password123"},
+    )
+    assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Auth: refresh token edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_refresh_invalid_token(client: TestClient) -> None:
+    client.post(
+        "/api/auth/bootstrap",
+        json={"username": "admin1", "password": "password123"},
+    )
+    resp = client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": "totally-invalid-token"},
+    )
+    assert resp.status_code == 401
+
+
+def test_refresh_revoked_token_revokes_all(client: TestClient) -> None:
+    """Using a revoked refresh token triggers theft detection: all tokens revoked."""
+    client.post(
+        "/api/auth/bootstrap",
+        json={"username": "admin1", "password": "password123"},
+    )
+    login_resp = client.post(
+        "/api/auth/login",
+        json={"username": "admin1", "password": "password123"},
+    )
+    token1 = login_resp.json()["refresh_token"]
+
+    # Use token1 to refresh → token1 becomes revoked, get token2
+    resp = client.post("/api/auth/refresh", json={"refresh_token": token1})
+    assert resp.status_code == 200
+    token2 = resp.json()["refresh_token"]
+
+    # Re-use the revoked token1 → theft detection, all tokens revoked
+    resp = client.post("/api/auth/refresh", json={"refresh_token": token1})
+    assert resp.status_code == 401
+
+    # Even token2 should now be revoked
+    resp = client.post("/api/auth/refresh", json={"refresh_token": token2})
+    assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Auth: logout
+# ---------------------------------------------------------------------------
+
+
+def test_logout(client: TestClient) -> None:
+    client.post(
+        "/api/auth/bootstrap",
+        json={"username": "admin1", "password": "password123"},
+    )
+    login_resp = client.post(
+        "/api/auth/login",
+        json={"username": "admin1", "password": "password123"},
+    )
+    data = login_resp.json()
+    auth_header = {"Authorization": f"Bearer {data['access_token']}"}
+
+    resp = client.post(
+        "/api/auth/logout",
+        json={"refresh_token": data["refresh_token"]},
+        headers=auth_header,
+    )
+    assert resp.status_code == 204
+
+    # Refresh token should be revoked after logout
+    resp = client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": data["refresh_token"]},
+    )
+    assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Auth: /me endpoints
+# ---------------------------------------------------------------------------
+
+
+def test_get_me(client: TestClient, auth: Dict[str, str]) -> None:
+    resp = client.get("/api/auth/me", headers=auth)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["username"] == "testadmin"
+    assert data["role"] == "admin"
+
+
+def test_update_me(client: TestClient) -> None:
+    bootstrap_resp = client.post(
+        "/api/auth/bootstrap",
+        json={"username": "admin1", "password": "password123"},
+    )
+    auth_header = {"Authorization": f"Bearer {bootstrap_resp.json()['access_token']}"}
+
+    resp = client.patch(
+        "/api/auth/me",
+        json={"display_name": "New Name", "email": "new@example.com"},
+        headers=auth_header,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["displayName"] == "New Name"
+    assert resp.json()["email"] == "new@example.com"
+
+
+def test_update_me_password(client: TestClient) -> None:
+    bootstrap_resp = client.post(
+        "/api/auth/bootstrap",
+        json={"username": "admin1", "password": "password123"},
+    )
+    auth_header = {"Authorization": f"Bearer {bootstrap_resp.json()['access_token']}"}
+
+    # Change password
+    resp = client.patch(
+        "/api/auth/me",
+        json={"password": "newpassword456"},
+        headers=auth_header,
+    )
+    assert resp.status_code == 200
+
+    # Login with new password should work
+    resp = client.post(
+        "/api/auth/login",
+        json={"username": "admin1", "password": "newpassword456"},
+    )
+    assert resp.status_code == 200
+
+
+def test_update_me_no_changes(client: TestClient, auth: Dict[str, str]) -> None:
+    resp = client.patch("/api/auth/me", json={}, headers=auth)
+    assert resp.status_code == 200
+    assert resp.json()["username"] == "testadmin"
+
+
+# ---------------------------------------------------------------------------
+# Auth: admin user management
+# ---------------------------------------------------------------------------
+
+
+def test_create_user_duplicate_username(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
+    client.post(
+        "/api/auth/users",
+        json={
+            "username": "dupe",
+            "display_name": "Dupe",
+            "password": "password123",
+            "role": "member",
+        },
+        headers=auth,
+    )
+    resp = client.post(
+        "/api/auth/users",
+        json={
+            "username": "dupe",
+            "display_name": "Dupe2",
+            "password": "password456",
+            "role": "member",
+        },
+        headers=auth,
+    )
+    assert resp.status_code == 409
+
+
+def test_create_user_invalid_role(client: TestClient, auth: Dict[str, str]) -> None:
+    resp = client.post(
+        "/api/auth/users",
+        json={
+            "username": "badrole",
+            "display_name": "Bad Role",
+            "password": "password123",
+            "role": "superadmin",
+        },
+        headers=auth,
+    )
+    assert resp.status_code == 400
+
+
+def test_update_user_role(client: TestClient, auth: Dict[str, str]) -> None:
+    resp = client.post(
+        "/api/auth/users",
+        json={
+            "username": "roletest",
+            "display_name": "Role Test",
+            "password": "password123",
+            "role": "member",
+        },
+        headers=auth,
+    )
+    user_id = resp.json()["id"]
+
+    resp = client.patch(
+        f"/api/auth/users/{user_id}",
+        json={"role": "viewer"},
+        headers=auth,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["role"] == "viewer"
+
+
+def test_update_user_deactivate(client: TestClient, auth: Dict[str, str]) -> None:
+    resp = client.post(
+        "/api/auth/users",
+        json={
+            "username": "deact",
+            "display_name": "Deactivate",
+            "password": "password123",
+            "role": "member",
+        },
+        headers=auth,
+    )
+    user_id = resp.json()["id"]
+
+    resp = client.patch(
+        f"/api/auth/users/{user_id}",
+        json={"is_active": False},
+        headers=auth,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["isActive"] is False
+
+
+def test_update_user_invalid_role(client: TestClient, auth: Dict[str, str]) -> None:
+    resp = client.post(
+        "/api/auth/users",
+        json={
+            "username": "badrole2",
+            "display_name": "Bad Role",
+            "password": "password123",
+            "role": "member",
+        },
+        headers=auth,
+    )
+    user_id = resp.json()["id"]
+
+    resp = client.patch(
+        f"/api/auth/users/{user_id}",
+        json={"role": "superadmin"},
+        headers=auth,
+    )
+    assert resp.status_code == 400
+
+
+def test_update_user_not_found(client: TestClient, auth: Dict[str, str]) -> None:
+    resp = client.patch(
+        "/api/auth/users/nonexistent",
+        json={"role": "viewer"},
+        headers=auth,
+    )
+    assert resp.status_code == 404
+
+
+def test_update_user_no_changes(client: TestClient, auth: Dict[str, str]) -> None:
+    resp = client.post(
+        "/api/auth/users",
+        json={
+            "username": "nochange",
+            "display_name": "No Change",
+            "password": "password123",
+            "role": "member",
+        },
+        headers=auth,
+    )
+    user_id = resp.json()["id"]
+
+    resp = client.patch(
+        f"/api/auth/users/{user_id}",
+        json={},
+        headers=auth,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["username"] == "nochange"
