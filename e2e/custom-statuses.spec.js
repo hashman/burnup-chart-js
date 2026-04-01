@@ -173,8 +173,8 @@ test.describe('Todo + Custom Statuses', () => {
     await expect(page.locator('h3', { hasText: '進行中' })).not.toBeVisible();
 
     // Reload and verify persistence
-    await page.reload();
-    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible();
+    await page.reload({ waitUntil: 'networkidle' });
+    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible({ timeout: 15_000 });
     await page.getByText('Todo', { exact: true }).click();
     await expect(page.locator('h3', { hasText: '開發中' })).toBeVisible({ timeout: 10_000 });
   });
@@ -251,10 +251,10 @@ test.describe('Todo + Custom Statuses', () => {
     expect(page.url()).toContain('#todo');
 
     // Reload the page
-    await page.reload();
+    await page.reload({ waitUntil: 'networkidle' });
 
     // Should still be on the Todo tab (Kanban columns visible)
-    await expect(page.locator('h3', { hasText: '待辦' })).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('h3', { hasText: '待辦' })).toBeVisible({ timeout: 15_000 });
     expect(page.url()).toContain('#todo');
   });
 

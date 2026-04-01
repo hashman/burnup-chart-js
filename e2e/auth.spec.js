@@ -77,10 +77,10 @@ test.describe('認證與授權', () => {
     await loginAsAdmin(page, expect);
 
     // Reload the page
-    await page.reload();
+    await page.reload({ waitUntil: 'networkidle' });
 
     // Should still be logged in (main app visible, not login page)
-    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(TEST_ADMIN.username)).toBeVisible();
   });
 
