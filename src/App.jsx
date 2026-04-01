@@ -1,13 +1,15 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, ReferenceLine, ReferenceDot, Label } from 'recharts';
-import { Upload, Download, Plus, Trash2, Calendar, User, Briefcase, AlertTriangle, CheckCircle2, Filter, Lock, ChevronLeft, Eye, EyeOff, Settings, Percent, MessageSquare, X, Send, Tag, Maximize2, Minimize2, BarChart2, TrendingUp, Clock } from 'lucide-react';
+import { Upload, Download, Plus, Trash2, Calendar, User, Briefcase, AlertTriangle, CheckCircle2, Filter, Lock, ChevronLeft, Eye, EyeOff, Settings, Percent, MessageSquare, X, Send, Tag, Maximize2, Minimize2, BarChart2, TrendingUp, Clock, ListTodo } from 'lucide-react';
 import Holidays from 'date-holidays';
+import TodoBoard from './components/TodoBoard';
+import TodoSection from './components/TodoSection';
 
 // --- Utility Functions ---
 
 const generateId = () => {
   const id = Date.now() + Math.random().toString(36).substr(2, 9);
-  return id === MERGED_TAB_ID ? Date.now() + Math.random().toString(36).substr(2, 9) : id;
+  return (id === MERGED_TAB_ID || id === TODO_TAB_ID) ? Date.now() + Math.random().toString(36).substr(2, 9) : id;
 };
 
 const normalizeDateString = (value) => {
@@ -160,6 +162,7 @@ const getDateRange = (startDateStr, endDateStr) => {
 };
 
 const MERGED_TAB_ID = '__merged__';
+const TODO_TAB_ID = '__todo__';
 const LS_MERGED_IDS_KEY = 'burnup_merged_project_ids';
 
 // Default Initial Data with Multiple Projects
@@ -350,7 +353,13 @@ function MergedProjectModal({ projects, initialSelectedIds, onConfirm, onCancel 
 
 export default function BurnupChartApp() {
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
-  const [activeProjectId, setActiveProjectId] = useState(INITIAL_PROJECTS[0].id);
+  const [activeProjectId, setActiveProjectId] = useState(() => {
+    const hash = window.location.hash.slice(1);
+    if (hash === 'todo') return TODO_TAB_ID;
+    if (hash === 'merged') return MERGED_TAB_ID;
+    if (hash) return hash;
+    return INITIAL_PROJECTS[0].id;
+  });
   const [filterPerson, setFilterPerson] = useState("");
   const [showAddTask, setShowAddTask] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -402,6 +411,31 @@ export default function BurnupChartApp() {
   const [newLogContent, setNewLogContent] = useState("");
   const [newLogDate, setNewLogDate] = useState(new Date().toISOString().split('T')[0]);
 
+  // Sync activeProjectId → location.hash
+  useEffect(() => {
+    const hash = activeProjectId === TODO_TAB_ID ? 'todo'
+      : activeProjectId === MERGED_TAB_ID ? 'merged'
+      : activeProjectId;
+    window.history.replaceState(null, '', `#${hash}`);
+  }, [activeProjectId]);
+
+  // Listen for back/forward navigation
+  useEffect(() => {
+    const onHashChange = () => {
+      const hash = window.location.hash.slice(1);
+      if (hash === 'todo') setActiveProjectId(TODO_TAB_ID);
+      else if (hash === 'merged') setActiveProjectId(MERGED_TAB_ID);
+      else if (hash) setActiveProjectId(hash);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  // Todo & Status State
+  const [todos, setTodos] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [pendingEditTodoId, setPendingEditTodoId] = useState(null);
+
   const { getExpectedEndDate, getExpectedPoints, loading: _holidayLoading } = useTaiwanCalendar();
 
   const [newTask, setNewTask] = useState({
@@ -424,9 +458,12 @@ export default function BurnupChartApp() {
       try {
         const data = await requestJson("/api/projects");
         if (!isActive) return;
+        const hash = window.location.hash.slice(1);
+        const hashTab = hash === 'todo' ? TODO_TAB_ID : hash === 'merged' ? MERGED_TAB_ID : hash || null;
         if (Array.isArray(data) && data.length > 0) {
           setProjects(data);
-          setActiveProjectId(data[0].id);
+          const validProjectId = hashTab && (hashTab === TODO_TAB_ID || hashTab === MERGED_TAB_ID || data.some(p => p.id === hashTab));
+          if (!validProjectId) setActiveProjectId(data[0].id);
           setApiAvailable(true);
         } else {
           const created = await requestJson("/api/projects", {
@@ -435,9 +472,17 @@ export default function BurnupChartApp() {
           });
           if (!isActive) return;
           setProjects([created]);
-          setActiveProjectId(created.id);
+          if (!hashTab || (hashTab !== TODO_TAB_ID && hashTab !== MERGED_TAB_ID)) setActiveProjectId(created.id);
           setApiAvailable(true);
         }
+        try {
+          const statusData = await requestJson("/api/statuses");
+          if (isActive) setStatuses(Array.isArray(statusData) ? statusData : []);
+        } catch {}
+        try {
+          const todoData = await requestJson("/api/todos");
+          if (isActive) setTodos(Array.isArray(todoData) ? todoData : []);
+        } catch {}
       } catch (_err) {
         if (!isActive) return;
         setApiAvailable(false);
@@ -531,7 +576,7 @@ export default function BurnupChartApp() {
 
   // 追蹤前一個非 merged 的 activeProjectId，供 Modal 取消時還原
   useEffect(() => {
-    if (activeProjectId !== MERGED_TAB_ID) {
+    if (activeProjectId !== MERGED_TAB_ID && activeProjectId !== TODO_TAB_ID) {
       previousProjectIdRef.current = activeProjectId;
     }
   }, [activeProjectId]);
@@ -571,7 +616,7 @@ export default function BurnupChartApp() {
     }
   }, [activeProjectId, mergedProjectIds.length]);
 
-  const isReadOnly = activeProjectId === MERGED_TAB_ID;
+  const isReadOnly = activeProjectId === MERGED_TAB_ID || activeProjectId === TODO_TAB_ID;
 
   const activeProject = useMemo(() =>
     activeProjectId === MERGED_TAB_ID
@@ -625,6 +670,20 @@ export default function BurnupChartApp() {
   const activeDetailTask = useMemo(() =>
     allTasks.find(t => t.id === detailTaskId),
   [allTasks, detailTaskId]);
+
+  const allTasksFlat = useMemo(() => projects.flatMap(p => p.tasks), [projects]);
+
+  const endStatusId = useMemo(() => statuses.find(s => s.isDefaultEnd)?.id, [statuses]);
+  const todoProgressByTask = useMemo(() => {
+    const map = {};
+    todos.forEach(t => {
+      if (!t.linkedTaskId) return;
+      if (!map[t.linkedTaskId]) map[t.linkedTaskId] = { total: 0, done: 0 };
+      map[t.linkedTaskId].total++;
+      if (t.status === endStatusId) map[t.linkedTaskId].done++;
+    });
+    return map;
+  }, [todos, endStatusId]);
 
   const normalizedTasks = useMemo(() => allTasks.map(task => ({
     ...task,
@@ -692,7 +751,7 @@ export default function BurnupChartApp() {
         expectedPct = total === 0 ? 100 : Math.round((elapsed / total) * 100);
       }
     }
-    let actualPct = (task.actualStart && task.actualEnd) ? 100 : 0;
+    const actualPct = task.progress ?? 0;
     return { expectedPct, actualPct };
   };
 
@@ -1495,6 +1554,155 @@ export default function BurnupChartApp() {
     }
   };
 
+  // --- Status CRUD ---
+  const createStatus = async (data) => {
+    const tempId = `status_${Date.now()}`;
+    const newStatus = { id: tempId, sortOrder: statuses.length, isDefaultStart: false, isDefaultEnd: false, ...data };
+    setStatuses(prev => [...prev, newStatus]);
+    if (apiAvailable) {
+      try {
+        const result = await requestJson('/api/statuses', { method: 'POST', body: JSON.stringify({ name: data.name, sort_order: data.sortOrder }) });
+        setStatuses(prev => prev.map(s => s.id === tempId ? result : s));
+        return result;
+      } catch { setApiAvailable(false); }
+    }
+    return newStatus;
+  };
+
+  const updateStatus = async (id, data) => {
+    setStatuses(prev => prev.map(s => {
+      if (s.id === id) return { ...s, ...data };
+      if (data.isDefaultStart && s.isDefaultStart) return { ...s, isDefaultStart: false };
+      if (data.isDefaultEnd && s.isDefaultEnd) return { ...s, isDefaultEnd: false };
+      return s;
+    }));
+    if (apiAvailable) {
+      try {
+        const body = {};
+        if (data.name !== undefined) body.name = data.name;
+        if (data.sortOrder !== undefined) body.sort_order = data.sortOrder;
+        if (data.isDefaultStart !== undefined) body.is_default_start = data.isDefaultStart;
+        if (data.isDefaultEnd !== undefined) body.is_default_end = data.isDefaultEnd;
+        await requestJson(`/api/statuses/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+        const all = await requestJson('/api/statuses');
+        setStatuses(all);
+      } catch { setApiAvailable(false); }
+    }
+  };
+
+  const deleteStatus = async (id, migrateTo) => {
+    setStatuses(prev => prev.filter(s => s.id !== id));
+    if (migrateTo) {
+      setTodos(prev => prev.map(t => t.status === id ? { ...t, status: migrateTo } : t));
+    }
+    if (apiAvailable) {
+      try {
+        const url = migrateTo ? `/api/statuses/${id}?migrate_to=${migrateTo}` : `/api/statuses/${id}`;
+        await requestJson(url, { method: 'DELETE' });
+      } catch { setApiAvailable(false); }
+    }
+  };
+
+  const reorderStatuses = async (items) => {
+    const reordered = items.map((item, i) => ({ ...item, sortOrder: i }));
+    setStatuses(reordered);
+    if (apiAvailable) {
+      try {
+        const body = reordered.map(s => ({ id: s.id, sortOrder: s.sortOrder }));
+        const result = await requestJson('/api/statuses/reorder', { method: 'POST', body: JSON.stringify(body) });
+        setStatuses(result);
+      } catch { setApiAvailable(false); }
+    }
+  };
+
+  // --- Todo CRUD ---
+  const createTodo = async (data) => {
+    const id = `todo_${Date.now()}${Math.random().toString(36).substr(2, 5)}`;
+    const startStatus = statuses.find(s => s.isDefaultStart);
+    const newTodo = {
+      id,
+      title: data.title,
+      status: data.status || (startStatus ? startStatus.id : ''),
+      priority: data.priority || 'medium',
+      dueDate: data.dueDate || null,
+      assignee: data.assignee || null,
+      tags: data.tags || [],
+      note: data.note || null,
+      linkedTaskId: data.linkedTaskId || null,
+      createdAt: new Date().toISOString(),
+      sortOrder: 0,
+    };
+    setTodos(prev => [...prev, newTodo]);
+    if (apiAvailable) {
+      try {
+        const created = await requestJson("/api/todos", {
+          method: "POST",
+          body: JSON.stringify(data),
+        });
+        setTodos(prev => prev.map(t => t.id === id ? created : t));
+      } catch { setApiAvailable(false); }
+    }
+  };
+
+  const updateTodo = async (todoId, patch) => {
+    setTodos(prev => prev.map(t => t.id === todoId ? { ...t, ...patch } : t));
+    if (apiAvailable) {
+      try {
+        const updated = await requestJson(`/api/todos/${todoId}`, {
+          method: "PATCH",
+          body: JSON.stringify(patch),
+        });
+        setTodos(prev => prev.map(t => t.id === todoId ? updated : t));
+      } catch { setApiAvailable(false); }
+    }
+  };
+
+  const deleteTodo = async (todoId) => {
+    setTodos(prev => prev.filter(t => t.id !== todoId));
+    if (apiAvailable) {
+      try {
+        await requestJson(`/api/todos/${todoId}`, { method: "DELETE" });
+      } catch { setApiAvailable(false); }
+    }
+  };
+
+  const createTodoComment = async (todoId, content) => {
+    const tempId = `tc_${Date.now()}`;
+    const now = new Date().toISOString();
+    const tempComment = { id: tempId, todoId, content, createdAt: now, updatedAt: now };
+    setTodos(prev => prev.map(t => t.id === todoId ? { ...t, comments: [...(t.comments || []), tempComment] } : t));
+    if (apiAvailable) {
+      try {
+        const created = await requestJson(`/api/todos/${todoId}/comments`, {
+          method: "POST", body: JSON.stringify({ content }),
+        });
+        setTodos(prev => prev.map(t => t.id === todoId ? { ...t, comments: (t.comments || []).map(c => c.id === tempId ? created : c) } : t));
+      } catch { setApiAvailable(false); }
+    }
+  };
+
+  const updateTodoComment = async (todoId, commentId, content) => {
+    const now = new Date().toISOString();
+    setTodos(prev => prev.map(t => t.id === todoId ? { ...t, comments: (t.comments || []).map(c => c.id === commentId ? { ...c, content, updatedAt: now } : c) } : t));
+    if (apiAvailable) {
+      try {
+        const updated = await requestJson(`/api/todo-comments/${commentId}`, {
+          method: "PATCH", body: JSON.stringify({ content }),
+        });
+        setTodos(prev => prev.map(t => t.id === todoId ? { ...t, comments: (t.comments || []).map(c => c.id === commentId ? updated : c) } : t));
+      } catch { setApiAvailable(false); }
+    }
+  };
+
+  const deleteTodoComment = async (todoId, commentId) => {
+    setTodos(prev => prev.map(t => t.id === todoId ? { ...t, comments: (t.comments || []).filter(c => c.id !== commentId) } : t));
+    if (apiAvailable) {
+      try {
+        await requestJson(`/api/todo-comments/${commentId}`, { method: "DELETE" });
+      } catch { setApiAvailable(false); }
+    }
+  };
+
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file || !activeProjectId) return;
@@ -1882,20 +2090,48 @@ export default function BurnupChartApp() {
                             <div className="h-full bg-blue-500 rounded-full" style={{ width: `${stats.expectedPct}%` }}></div>
                           </div>
                         </div>
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-xs text-gray-500 mb-1">
-                            <span>實際完成 (Actual)</span>
-                            <span className="font-mono">{stats.actualPct}%</span>
-                          </div>
-                          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full ${stats.actualPct === 100 ? 'bg-emerald-500' : 'bg-gray-300'}`} style={{ width: `${stats.actualPct}%` }}></div>
-                          </div>
-                        </div>
+                        {(() => {
+                          const tp = todoProgressByTask[activeDetailTask.id];
+                          const pct = tp ? Math.round((tp.done / tp.total) * 100) : stats.actualPct;
+                          const label = tp ? `Todo 進度 (${tp.done}/${tp.total})` : '完成進度';
+                          const barColor = pct === 100 ? 'bg-emerald-500' : tp ? 'bg-amber-400' : 'bg-indigo-400';
+                          const textColor = pct === 100 ? 'text-emerald-600' : tp ? 'text-amber-500' : 'text-indigo-500';
+                          return (
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                <span>{label}</span>
+                                <span className={`font-mono ${textColor}`}>{pct}%</span>
+                              </div>
+                              {tp ? (
+                                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                                  <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+                                </div>
+                              ) : (
+                                <input
+                                  type="range"
+                                  min="0" max="100" step="5"
+                                  value={activeDetailTask.progress ?? 0}
+                                  onChange={(e) => updateTask(activeDetailTask.id, 'progress', parseInt(e.target.value))}
+                                  className="w-full h-2 accent-indigo-500 cursor-pointer"
+                                />
+                              )}
+                            </div>
+                          );
+                        })()}
                       </>
                     );
                   })()}
                 </div>
               </div>
+
+              {/* Todo Section */}
+              <TodoSection
+                todos={todos.filter(t => t.linkedTaskId === activeDetailTask.id)}
+                statuses={statuses}
+                onToggleTodo={(todoId, newStatus) => updateTodo(todoId, { status: newStatus })}
+                onNavigateToTodoTab={() => { setDetailTaskId(null); setActiveProjectId(TODO_TAB_ID); }}
+                onEditTodo={(todoId) => { setDetailTaskId(null); setPendingEditTodoId(todoId); setActiveProjectId(TODO_TAB_ID); }}
+              />
 
               {/* Logs Section */}
               <div className="space-y-4">
@@ -2027,6 +2263,23 @@ export default function BurnupChartApp() {
               合併檢視
             </div>
 
+            {/* Divider before todo tab */}
+            <div className="w-px h-5 bg-gray-200 self-center mx-1" />
+
+            {/* Todo Tab */}
+            <div
+              onClick={() => setActiveProjectId(TODO_TAB_ID)}
+              className={`
+                flex items-center gap-1.5 px-4 py-3 border-b-2 cursor-pointer whitespace-nowrap text-sm font-medium transition-colors
+                ${activeProjectId === TODO_TAB_ID
+                  ? 'border-amber-500 text-amber-600 bg-amber-50/60 rounded-t-lg'
+                  : 'border-dashed border-amber-300 text-amber-400 hover:text-amber-600 hover:border-amber-400'}
+              `}
+            >
+              <ListTodo size={14} />
+              Todo
+            </div>
+
             {isCreatingProject ? (
               <div className="flex items-center gap-1 px-2 py-2 border-b-2 border-transparent">
                 <input
@@ -2056,6 +2309,32 @@ export default function BurnupChartApp() {
         </div>
       </div>
 
+      {/* Main Content Area */}
+      {activeProjectId === TODO_TAB_ID ? (
+        <div className="max-w-[95%] mx-auto mt-6 space-y-6">
+          <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
+            <TodoBoard
+              todos={todos}
+              statuses={statuses}
+              allTasks={allTasksFlat}
+              projects={projects}
+              onCreateTodo={createTodo}
+              onUpdateTodo={updateTodo}
+              onDeleteTodo={deleteTodo}
+              onCreateStatus={createStatus}
+              onUpdateStatus={updateStatus}
+              onDeleteStatus={deleteStatus}
+              onReorderStatuses={reorderStatuses}
+              onCreateComment={createTodoComment}
+              onUpdateComment={updateTodoComment}
+              onDeleteComment={deleteTodoComment}
+              initialEditTodoId={pendingEditTodoId}
+              onClearInitialEditTodoId={() => setPendingEditTodoId(null)}
+            />
+          </div>
+        </div>
+      ) : (
+      <>
       {/* ... Rest of the component (Chart Section, Task Management Grid) remains the same ... */}
       <div className="max-w-[95%] mx-auto mt-6 space-y-6">
 
@@ -2418,13 +2697,43 @@ export default function BurnupChartApp() {
                                   </div>
                                   <span className="text-[10px] text-blue-600 font-mono w-6 text-right">{expectedPct}%</span>
                                 </div>
-                                {/* Actual Progress Bar (Completion) */}
-                                <div className="flex items-center gap-1" title="完成度 (Actual)">
-                                  <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden flex-1">
-                                    <div className={`h-full ${actualPct === 100 ? 'bg-emerald-500' : 'bg-gray-300'}`} style={{ width: `${actualPct}%` }}></div>
-                                  </div>
-                                  <span className={`text-[10px] font-mono w-6 text-right ${actualPct === 100 ? 'text-emerald-600 font-bold' : 'text-gray-400'}`}>{actualPct}%</span>
-                                </div>
+                                {/* Actual / Todo Progress Bar */}
+                                {(() => {
+                                  const tp = todoProgressByTask[task.id];
+                                  const pct = tp ? Math.round((tp.done / tp.total) * 100) : actualPct;
+                                  const barColor = pct === 100 ? 'bg-emerald-500' : tp ? 'bg-amber-400' : 'bg-indigo-400';
+                                  const textColor = pct === 100 ? 'text-emerald-600 font-bold' : tp ? 'text-amber-500' : 'text-indigo-500';
+                                  return (
+                                    <div className="flex items-center gap-1">
+                                      {tp ? (
+                                        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden flex-1">
+                                          <div className={`h-full ${barColor}`} style={{ width: `${pct}%` }} />
+                                        </div>
+                                      ) : (
+                                        <input
+                                          type="range"
+                                          min="0"
+                                          max="100"
+                                          step="5"
+                                          value={task.progress ?? 0}
+                                          disabled={isReadOnly}
+                                          onChange={(e) => { if (!isReadOnly) updateTask(task.id, 'progress', parseInt(e.target.value)); }}
+                                          className="w-full h-1.5 flex-1 accent-indigo-500 cursor-pointer disabled:cursor-default"
+                                        />
+                                      )}
+                                      <span className={`text-[10px] font-mono w-6 text-right ${textColor}`}>{pct}%</span>
+                                      {tp && (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setDetailTaskId(task.id); }}
+                                          className="text-[10px] font-mono text-indigo-400 hover:text-indigo-600 cursor-pointer shrink-0"
+                                          title="查看關聯 Todo"
+                                        >
+                                          {tp.done}/{tp.total}
+                                        </button>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             </td>
 
@@ -2511,6 +2820,8 @@ export default function BurnupChartApp() {
         </div>
 
       </div>
+      </>
+      )}
     </div>
   );
 }

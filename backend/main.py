@@ -1,3 +1,4 @@
+import json as _json
 import os
 import sqlite3
 from datetime import datetime
@@ -105,6 +106,7 @@ class TaskCreate(BaseModel):
     actualStart: str = ""
     actualEnd: str = ""
     showLabel: bool = False
+    progress: int = Field(default=0, ge=0, le=100)
 
 
 class TaskUpdate(BaseModel):
@@ -134,6 +136,7 @@ class TaskUpdate(BaseModel):
     actualStart: Optional[str] = None
     actualEnd: Optional[str] = None
     showLabel: Optional[bool] = None
+    progress: Optional[int] = Field(default=None, ge=0, le=100)
 
 
 class TaskOut(BaseModel):
@@ -166,6 +169,7 @@ class TaskOut(BaseModel):
     actualStart: str = ""
     actualEnd: str = ""
     showLabel: bool = False
+    progress: int = 0
     logs: List[LogOut] = Field(default_factory=list)
 
 
@@ -212,6 +216,91 @@ class ProjectOut(BaseModel):
     id: str
     name: str
     tasks: List[TaskOut] = Field(default_factory=list)
+
+
+class StatusCreate(BaseModel):
+    id: Optional[str] = None
+    name: str
+    sort_order: Optional[float] = None
+
+
+class StatusUpdate(BaseModel):
+    name: Optional[str] = None
+    sort_order: Optional[float] = None
+    is_default_start: Optional[bool] = None
+    is_default_end: Optional[bool] = None
+
+
+class StatusOut(BaseModel):
+    id: str
+    name: str
+    sortOrder: float
+    isDefaultStart: bool
+    isDefaultEnd: bool
+
+
+class StatusReorderItem(BaseModel):
+    id: str
+    sortOrder: float
+
+
+class StatusDelete(BaseModel):
+    migrate_to: Optional[str] = None
+
+
+class TodoCreate(BaseModel):
+    id: Optional[str] = None
+    title: str
+    status: Optional[str] = None  # status id, defaults to start status at API level
+    priority: str = "medium"
+    dueDate: Optional[str] = None
+    assignee: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    note: Optional[str] = None
+    linkedTaskId: Optional[str] = None
+
+
+class TodoUpdate(BaseModel):
+    title: Optional[str] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
+    dueDate: Optional[str] = None
+    assignee: Optional[str] = None
+    tags: Optional[List[str]] = None
+    note: Optional[str] = None
+    linkedTaskId: Optional[str] = None
+    sortOrder: Optional[float] = None
+
+
+class TodoCommentCreate(BaseModel):
+    content: str
+
+
+class TodoCommentUpdate(BaseModel):
+    content: str
+
+
+class TodoCommentOut(BaseModel):
+    id: str
+    todoId: str
+    content: str
+    createdAt: str
+    updatedAt: str
+
+
+class TodoOut(BaseModel):
+    id: str
+    title: str
+    status: str
+    priority: str
+    dueDate: Optional[str] = None
+    assignee: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    note: Optional[str] = None
+    linkedTaskId: Optional[str] = None
+    createdAt: str
+    sortOrder: float
+    comments: List[TodoCommentOut] = Field(default_factory=list)
 
 
 @app.on_event("startup")
@@ -287,6 +376,7 @@ def row_to_task(row: sqlite3.Row, logs: List[LogPayload]) -> TaskPayload:
         "actualStart": normalize_text(row["actual_start"]),
         "actualEnd": normalize_text(row["actual_end"]),
         "showLabel": bool(row["show_label"]),
+        "progress": row["progress"],
         "logs": logs,
     }
 
@@ -347,6 +437,45 @@ def fetch_task(conn: sqlite3.Connection, task_id: str) -> Optional[TaskPayload]:
     ).fetchall()
     logs = [row_to_log(row) for row in log_rows]
     return row_to_task(task_row, logs)
+
+
+def row_to_status(row: sqlite3.Row) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "sortOrder": row["sort_order"],
+        "isDefaultStart": bool(row["is_default_start"]),
+        "isDefaultEnd": bool(row["is_default_end"]),
+    }
+
+
+def row_to_todo_comment(row: sqlite3.Row) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "todoId": row["todo_id"],
+        "content": row["content"],
+        "createdAt": row["created_at"],
+        "updatedAt": row["updated_at"],
+    }
+
+
+def row_to_todo(
+    row: sqlite3.Row, comments: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "status": row["status"],
+        "priority": row["priority"],
+        "dueDate": normalize_text(row["due_date"]) or None,
+        "assignee": normalize_text(row["assignee"]) or None,
+        "tags": _json.loads(row["tags"]) if row["tags"] else [],
+        "note": normalize_text(row["note"]) or None,
+        "linkedTaskId": normalize_text(row["linked_task_id"]) or None,
+        "createdAt": row["created_at"],
+        "sortOrder": row["sort_order"],
+        "comments": comments or [],
+    }
 
 
 @app.get("/api/health")
@@ -544,9 +673,9 @@ def create_task(project_id: str, payload: TaskCreate) -> TaskPayload:
             """
             INSERT INTO tasks (
                 id, project_id, name, points, people, added_date, expected_start,
-                expected_end, actual_start, actual_end, show_label, created_at
+                expected_end, actual_start, actual_end, show_label, progress, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task_id,
@@ -560,6 +689,7 @@ def create_task(project_id: str, payload: TaskCreate) -> TaskPayload:
                 payload.actualStart,
                 payload.actualEnd,
                 1 if payload.showLabel else 0,
+                payload.progress,
                 now,
             ),
         )
@@ -613,6 +743,9 @@ def update_task(task_id: str, payload: TaskUpdate) -> TaskPayload:
     if payload.showLabel is not None:
         fields.append("show_label = ?")
         values.append(1 if payload.showLabel else 0)
+    if payload.progress is not None:
+        fields.append("progress = ?")
+        values.append(payload.progress)
 
     with get_connection() as conn:
         existing = conn.execute(
@@ -715,6 +848,412 @@ def delete_log(log_id: str) -> None:
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="Log not found")
     return None
+
+
+# ---------------------------------------------------------------------------
+# Status CRUD endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/statuses", response_model=List[StatusOut])
+def list_statuses() -> List[Dict[str, Any]]:
+    """Return all statuses ordered by sort_order."""
+    with get_connection() as conn:
+        rows = conn.execute("SELECT * FROM statuses ORDER BY sort_order").fetchall()
+    return [row_to_status(row) for row in rows]
+
+
+@app.post(
+    "/api/statuses",
+    response_model=StatusOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_status(payload: StatusCreate) -> Dict[str, Any]:
+    """Create a new status."""
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Status name must not be empty")
+
+    status_id = payload.id or f"status_{uuid4().hex}"
+
+    with get_connection() as conn:
+        if payload.sort_order is not None:
+            sort_order = payload.sort_order
+        else:
+            row = conn.execute(
+                "SELECT MAX(sort_order) AS max_so FROM statuses"
+            ).fetchone()
+            max_so = row["max_so"] if row["max_so"] is not None else -1
+            sort_order = max_so + 1
+
+        conn.execute(
+            "INSERT INTO statuses (id, name, sort_order, is_default_start, is_default_end) "
+            "VALUES (?, ?, ?, 0, 0)",
+            (status_id, name, sort_order),
+        )
+        conn.commit()
+
+        new_row = conn.execute(
+            "SELECT * FROM statuses WHERE id = ?", (status_id,)
+        ).fetchone()
+
+    return row_to_status(new_row)
+
+
+@app.patch("/api/statuses/{status_id}", response_model=StatusOut)
+def update_status(status_id: str, payload: StatusUpdate) -> Dict[str, Any]:
+    """Update a status by id."""
+    with get_connection() as conn:
+        existing = conn.execute(
+            "SELECT * FROM statuses WHERE id = ?", (status_id,)
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Status not found")
+
+        if payload.name is not None:
+            stripped = payload.name.strip()
+            if not stripped:
+                raise HTTPException(
+                    status_code=400, detail="Status name must not be empty"
+                )
+
+        fields: List[str] = []
+        values: List[Any] = []
+
+        if payload.name is not None:
+            fields.append("name = ?")
+            values.append(payload.name.strip())
+        if payload.sort_order is not None:
+            fields.append("sort_order = ?")
+            values.append(payload.sort_order)
+
+        # Handle is_default_start: clear old one first
+        if payload.is_default_start is True:
+            conn.execute("UPDATE statuses SET is_default_start = 0")
+            fields.append("is_default_start = ?")
+            values.append(1)
+        elif payload.is_default_start is False:
+            fields.append("is_default_start = ?")
+            values.append(0)
+
+        # Handle is_default_end: clear old one first
+        if payload.is_default_end is True:
+            conn.execute("UPDATE statuses SET is_default_end = 0")
+            fields.append("is_default_end = ?")
+            values.append(1)
+        elif payload.is_default_end is False:
+            fields.append("is_default_end = ?")
+            values.append(0)
+
+        if fields:
+            values.append(status_id)
+            conn.execute(
+                f"UPDATE statuses SET {', '.join(fields)} WHERE id = ?", values
+            )
+            conn.commit()
+
+        row = conn.execute(
+            "SELECT * FROM statuses WHERE id = ?", (status_id,)
+        ).fetchone()
+
+    return row_to_status(row)
+
+
+@app.delete("/api/statuses/{status_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_status(status_id: str, migrate_to: Optional[str] = None) -> None:
+    """Delete a status by id."""
+    with get_connection() as conn:
+        existing = conn.execute(
+            "SELECT * FROM statuses WHERE id = ?", (status_id,)
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Status not found")
+
+        # Reject if it's a default start or end status
+        if existing["is_default_start"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete the default start status",
+            )
+        if existing["is_default_end"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete the default end status",
+            )
+
+        # Check if any todos use this status
+        todo_count = conn.execute(
+            "SELECT COUNT(*) FROM todos WHERE status = ?", (status_id,)
+        ).fetchone()[0]
+
+        if todo_count > 0:
+            if not migrate_to:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Status has todos; provide migrate_to query param",
+                )
+            # Verify migrate_to status exists
+            target = conn.execute(
+                "SELECT 1 FROM statuses WHERE id = ?", (migrate_to,)
+            ).fetchone()
+            if not target:
+                raise HTTPException(
+                    status_code=400, detail="migrate_to status not found"
+                )
+            conn.execute(
+                "UPDATE todos SET status = ? WHERE status = ?",
+                (migrate_to, status_id),
+            )
+
+        conn.execute("DELETE FROM statuses WHERE id = ?", (status_id,))
+        conn.commit()
+
+    return None
+
+
+@app.post("/api/statuses/reorder", response_model=List[StatusOut])
+def reorder_statuses(items: List[StatusReorderItem]) -> List[Dict[str, Any]]:
+    """Batch update sort_order for statuses."""
+    with get_connection() as conn:
+        for item in items:
+            conn.execute(
+                "UPDATE statuses SET sort_order = ? WHERE id = ?",
+                (item.sortOrder, item.id),
+            )
+        conn.commit()
+        rows = conn.execute("SELECT * FROM statuses ORDER BY sort_order").fetchall()
+    return [row_to_status(row) for row in rows]
+
+
+# ---------------------------------------------------------------------------
+# Todo CRUD endpoints
+# ---------------------------------------------------------------------------
+
+
+def _fetch_todo_comments(
+    conn: sqlite3.Connection, todo_ids: List[str]
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Fetch comments for a list of todo IDs, grouped by todo_id."""
+    if not todo_ids:
+        return {}
+    placeholders = ",".join("?" * len(todo_ids))
+    rows = conn.execute(
+        f"SELECT * FROM todo_comments WHERE todo_id IN ({placeholders}) ORDER BY created_at",
+        todo_ids,
+    ).fetchall()
+    result: Dict[str, List[Dict[str, Any]]] = {}
+    for row in rows:
+        result.setdefault(row["todo_id"], []).append(row_to_todo_comment(row))
+    return result
+
+
+@app.get("/api/todos", response_model=List[TodoOut])
+def list_todos() -> List[Dict[str, Any]]:
+    """Return all todos ordered by sort_order, created_at."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM todos ORDER BY sort_order, created_at"
+        ).fetchall()
+        todo_ids = [r["id"] for r in rows]
+        comments_map = _fetch_todo_comments(conn, todo_ids)
+    return [row_to_todo(row, comments_map.get(row["id"], [])) for row in rows]
+
+
+@app.post("/api/todos", response_model=TodoOut, status_code=status.HTTP_201_CREATED)
+def create_todo(payload: TodoCreate) -> Dict[str, Any]:
+    """Create a new todo with status validation."""
+    todo_id = payload.id or f"todo_{uuid4().hex}"
+    now = utc_now()
+
+    with get_connection() as conn:
+        # Resolve status
+        if payload.status:
+            valid = conn.execute(
+                "SELECT 1 FROM statuses WHERE id = ?", (payload.status,)
+            ).fetchone()
+            if not valid:
+                raise HTTPException(status_code=400, detail="Invalid status id")
+            resolved_status = payload.status
+        else:
+            start_row = conn.execute(
+                "SELECT id FROM statuses WHERE is_default_start = 1"
+            ).fetchone()
+            resolved_status = start_row["id"]
+
+        # Validate linked task
+        if payload.linkedTaskId:
+            task_row = conn.execute(
+                "SELECT 1 FROM tasks WHERE id = ?", (payload.linkedTaskId,)
+            ).fetchone()
+            if not task_row:
+                raise HTTPException(status_code=404, detail="Linked task not found")
+
+        conn.execute(
+            """INSERT INTO todos (id, title, status, priority, due_date, assignee,
+               tags, note, linked_task_id, created_at, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                todo_id,
+                payload.title,
+                resolved_status,
+                payload.priority,
+                payload.dueDate or "",
+                payload.assignee or "",
+                _json.dumps(payload.tags),
+                payload.note or "",
+                payload.linkedTaskId or None,
+                now,
+                0,
+            ),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
+    return row_to_todo(row, [])
+
+
+@app.patch("/api/todos/{todo_id}", response_model=TodoOut)
+def update_todo(todo_id: str, payload: TodoUpdate) -> Dict[str, Any]:
+    """Update a todo by id with status validation."""
+    with get_connection() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM todos WHERE id = ?", (todo_id,)
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Todo not found")
+
+        fields: List[str] = []
+        values: List[Any] = []
+
+        if payload.title is not None:
+            fields.append("title = ?")
+            values.append(payload.title)
+        if payload.status is not None:
+            valid = conn.execute(
+                "SELECT 1 FROM statuses WHERE id = ?", (payload.status,)
+            ).fetchone()
+            if not valid:
+                raise HTTPException(status_code=400, detail="Invalid status id")
+            fields.append("status = ?")
+            values.append(payload.status)
+        if payload.priority is not None:
+            fields.append("priority = ?")
+            values.append(payload.priority)
+        if payload.dueDate is not None:
+            fields.append("due_date = ?")
+            values.append(payload.dueDate)
+        if payload.assignee is not None:
+            fields.append("assignee = ?")
+            values.append(payload.assignee)
+        if payload.tags is not None:
+            fields.append("tags = ?")
+            values.append(_json.dumps(payload.tags))
+        if payload.note is not None:
+            fields.append("note = ?")
+            values.append(payload.note)
+        if payload.linkedTaskId is not None:
+            fields.append("linked_task_id = ?")
+            values.append(payload.linkedTaskId)
+        if payload.sortOrder is not None:
+            fields.append("sort_order = ?")
+            values.append(payload.sortOrder)
+
+        if fields:
+            values.append(todo_id)
+            conn.execute(f"UPDATE todos SET {', '.join(fields)} WHERE id = ?", values)
+            conn.commit()
+
+        row = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
+        comments = conn.execute(
+            "SELECT * FROM todo_comments WHERE todo_id = ? ORDER BY created_at",
+            (todo_id,),
+        ).fetchall()
+    return row_to_todo(row, [row_to_todo_comment(c) for c in comments])
+
+
+@app.delete("/api/todos/{todo_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_todo(todo_id: str) -> None:
+    """Delete a todo by id."""
+    with get_connection() as conn:
+        result = conn.execute("DELETE FROM todos WHERE id = ?", (todo_id,))
+        conn.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Todo not found")
+    return None
+
+
+@app.get("/api/tasks/{task_id}/todos", response_model=List[TodoOut])
+def list_task_todos(task_id: str) -> List[Dict[str, Any]]:
+    """Return all todos linked to a specific task."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM todos WHERE linked_task_id = ? ORDER BY sort_order, created_at",
+            (task_id,),
+        ).fetchall()
+        todo_ids = [r["id"] for r in rows]
+        comments_map = _fetch_todo_comments(conn, todo_ids)
+    return [row_to_todo(row, comments_map.get(row["id"], [])) for row in rows]
+
+
+# ---------------------------------------------------------------------------
+# Todo Comment CRUD endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post(
+    "/api/todos/{todo_id}/comments",
+    response_model=TodoCommentOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_todo_comment(todo_id: str, payload: TodoCommentCreate) -> Dict[str, Any]:
+    """Create a comment on a todo."""
+    comment_id = f"tc_{uuid4().hex}"
+    now = utc_now()
+    with get_connection() as conn:
+        todo_row = conn.execute(
+            "SELECT 1 FROM todos WHERE id = ?", (todo_id,)
+        ).fetchone()
+        if not todo_row:
+            raise HTTPException(status_code=404, detail="Todo not found")
+        conn.execute(
+            "INSERT INTO todo_comments (id, todo_id, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            (comment_id, todo_id, payload.content, now, now),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM todo_comments WHERE id = ?", (comment_id,)
+        ).fetchone()
+    return row_to_todo_comment(row)
+
+
+@app.patch("/api/todo-comments/{comment_id}", response_model=TodoCommentOut)
+def update_todo_comment(comment_id: str, payload: TodoCommentUpdate) -> Dict[str, Any]:
+    """Update a todo comment."""
+    now = utc_now()
+    with get_connection() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM todo_comments WHERE id = ?", (comment_id,)
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Comment not found")
+        conn.execute(
+            "UPDATE todo_comments SET content = ?, updated_at = ? WHERE id = ?",
+            (payload.content, now, comment_id),
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM todo_comments WHERE id = ?", (comment_id,)
+        ).fetchone()
+    return row_to_todo_comment(row)
+
+
+@app.delete("/api/todo-comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_todo_comment(comment_id: str) -> None:
+    """Delete a todo comment."""
+    with get_connection() as conn:
+        result = conn.execute("DELETE FROM todo_comments WHERE id = ?", (comment_id,))
+        conn.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Comment not found")
 
 
 if __name__ == "__main__":
