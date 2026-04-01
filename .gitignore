@@ -12,6 +12,7 @@ backend/data/*.sqlite3
 backend/data/backups/
 .pytest_cache
 .coverage
+coverage/
 __pycache__
 .superpowers
 .worktrees
