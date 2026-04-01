@@ -1,22 +1,30 @@
 import { test, expect } from '@playwright/test';
 import { API_BASE } from './test-config.js';
+import { authHeaders, loginAsAdmin } from './auth-helper.js';
 
 // ---------------------------------------------------------------------------
 // API Helpers
 // ---------------------------------------------------------------------------
 
+let _headers;
+
+function headers() {
+  if (!_headers) throw new Error('Auth headers not initialized — did beforeAll run?');
+  return _headers;
+}
+
 async function getStatuses() {
-  const res = await fetch(`${API_BASE}/statuses`);
+  const res = await fetch(`${API_BASE}/statuses`, { headers: headers() });
   if (!res.ok) throw new Error(`getStatuses failed: ${res.status}`);
   return res.json();
 }
 
 async function deleteAllTodos() {
-  const res = await fetch(`${API_BASE}/todos`);
+  const res = await fetch(`${API_BASE}/todos`, { headers: headers() });
   if (!res.ok) return;
   const todos = await res.json();
   await Promise.all(
-    todos.map((t) => fetch(`${API_BASE}/todos/${t.id}`, { method: 'DELETE' })),
+    todos.map((t) => fetch(`${API_BASE}/todos/${t.id}`, { method: 'DELETE', headers: headers() })),
   );
 }
 
@@ -35,7 +43,7 @@ async function resetCustomStatuses() {
   // Keep only one middle status; delete the rest
   if (middles.length > 1) {
     for (let i = 1; i < middles.length; i++) {
-      await fetch(`${API_BASE}/statuses/${middles[i].id}`, { method: 'DELETE' });
+      await fetch(`${API_BASE}/statuses/${middles[i].id}`, { method: 'DELETE', headers: headers() });
     }
   }
 
@@ -43,7 +51,7 @@ async function resetCustomStatuses() {
   if (middles.length === 0) {
     await fetch(`${API_BASE}/statuses`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: headers(),
       body: JSON.stringify({ name: '進行中', sortOrder: 1 }),
     });
   }
@@ -54,21 +62,21 @@ async function resetCustomStatuses() {
     if (s.isDefaultStart && s.name !== '待辦') {
       await fetch(`${API_BASE}/statuses/${s.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers(),
         body: JSON.stringify({ name: '待辦' }),
       });
     }
     if (s.isDefaultEnd && s.name !== '已完成') {
       await fetch(`${API_BASE}/statuses/${s.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers(),
         body: JSON.stringify({ name: '已完成' }),
       });
     }
     if (!s.isDefaultStart && !s.isDefaultEnd && s.name !== '進行中') {
       await fetch(`${API_BASE}/statuses/${s.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers(),
         body: JSON.stringify({ name: '進行中' }),
       });
     }
@@ -79,7 +87,7 @@ async function createTodoViaAPI(title, fields = {}) {
   const body = { title, ...fields };
   const res = await fetch(`${API_BASE}/todos`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: headers(),
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`createTodo failed: ${res.status} ${await res.text()}`);
@@ -91,7 +99,7 @@ async function createStatusViaAPI(name, sortOrder) {
   if (sortOrder !== undefined) body.sortOrder = sortOrder;
   const res = await fetch(`${API_BASE}/statuses`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: headers(),
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`createStatus failed: ${res.status} ${await res.text()}`);
@@ -100,7 +108,6 @@ async function createStatusViaAPI(name, sortOrder) {
 
 /** Navigate to the Todo tab and wait for the Kanban board to render. */
 async function navigateToTodoTab(page) {
-  await page.goto('/');
   // The Todo tab is a button/tab at the bottom of the tab bar
   await page.getByText('Todo', { exact: true }).click();
   // Wait for the default "待辦" column header to appear
@@ -112,9 +119,14 @@ async function navigateToTodoTab(page) {
 // ---------------------------------------------------------------------------
 
 test.describe('Todo + Custom Statuses', () => {
-  test.beforeEach(async () => {
+  test.beforeAll(async () => {
+    _headers = await authHeaders();
+  });
+
+  test.beforeEach(async ({ page }) => {
     await deleteAllTodos();
     await resetCustomStatuses();
+    await loginAsAdmin(page, expect);
   });
 
   test('displays default 3 status columns', async ({ page }) => {
@@ -162,6 +174,7 @@ test.describe('Todo + Custom Statuses', () => {
 
     // Reload and verify persistence
     await page.reload();
+    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible();
     await page.getByText('Todo', { exact: true }).click();
     await expect(page.locator('h3', { hasText: '開發中' })).toBeVisible({ timeout: 10_000 });
   });
@@ -331,7 +344,7 @@ test.describe('Todo + Custom Statuses', () => {
     await page.waitForTimeout(500);
 
     // Verify via API that the todo's status changed
-    const todosRes = await fetch(`${API_BASE}/todos`);
+    const todosRes = await fetch(`${API_BASE}/todos`, { headers: headers() });
     const todosAfter = await todosRes.json();
     const updated = todosAfter.find((t) => t.id === todo.id);
     expect(updated.status).toBe(middleStatus.id);

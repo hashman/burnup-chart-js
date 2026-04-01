@@ -11,17 +11,6 @@ DB_PATH: Path = Path(
 
 
 def get_connection() -> sqlite3.Connection:
-    """Create and configure a SQLite connection.
-
-    Args:
-        None.
-
-    Returns:
-        sqlite3.Connection: Configured SQLite connection.
-
-    Raises:
-        sqlite3.Error: If the connection cannot be established.
-    """
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -30,24 +19,35 @@ def get_connection() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Initialize the database schema if it does not exist.
-
-    Args:
-        None.
-
-    Returns:
-        None.
-
-    Raises:
-        sqlite3.Error: If schema initialization fails.
-    """
     with get_connection() as conn:
         conn.executescript(
             """
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE,
+                display_name TEXT NOT NULL,
+                email TEXT,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'member',
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS refresh_tokens (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                token_hash TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                revoked INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
             CREATE TABLE IF NOT EXISTS projects (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                created_by TEXT,
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
             );
             CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY,
@@ -71,7 +71,9 @@ def init_db() -> None:
                 date TEXT NOT NULL,
                 content TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+                author_id TEXT,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL
             );
             CREATE TABLE IF NOT EXISTS statuses (
                 id TEXT PRIMARY KEY,
@@ -92,8 +94,10 @@ def init_db() -> None:
                 linked_task_id TEXT,
                 created_at TEXT NOT NULL,
                 sort_order REAL NOT NULL DEFAULT 0,
+                created_by TEXT,
                 FOREIGN KEY (linked_task_id) REFERENCES tasks(id) ON DELETE SET NULL,
-                FOREIGN KEY (status) REFERENCES statuses(id)
+                FOREIGN KEY (status) REFERENCES statuses(id),
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
             );
             CREATE TABLE IF NOT EXISTS todo_comments (
                 id TEXT PRIMARY KEY,
@@ -101,7 +105,9 @@ def init_db() -> None:
                 content TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE
+                author_id TEXT,
+                FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE,
+                FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL
             );
             """
         )
@@ -126,3 +132,32 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE tasks ADD COLUMN progress INTEGER NOT NULL DEFAULT 0"
             )
+
+        # Add created_by to projects if missing
+        project_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(projects)").fetchall()
+        }
+        if "created_by" not in project_columns:
+            conn.execute("ALTER TABLE projects ADD COLUMN created_by TEXT")
+
+        # Add created_by to todos if missing
+        todo_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(todos)").fetchall()
+        }
+        if "created_by" not in todo_columns:
+            conn.execute("ALTER TABLE todos ADD COLUMN created_by TEXT")
+
+        # Add author_id to todo_comments if missing
+        comment_columns = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(todo_comments)").fetchall()
+        }
+        if "author_id" not in comment_columns:
+            conn.execute("ALTER TABLE todo_comments ADD COLUMN author_id TEXT")
+
+        # Add author_id to logs if missing
+        log_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(logs)").fetchall()
+        }
+        if "author_id" not in log_columns:
+            conn.execute("ALTER TABLE logs ADD COLUMN author_id TEXT")

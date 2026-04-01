@@ -13,47 +13,31 @@ import db
 import main
 
 
+def _auth_headers(client: TestClient) -> Dict[str, str]:
+    """Bootstrap an admin user and return auth headers."""
+    resp = client.post(
+        "/api/auth/bootstrap",
+        json={"username": "testadmin", "password": "testpass123"},
+    )
+    assert resp.status_code == 200
+    token = resp.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
 def create_project(
-    client: TestClient, name: str, project_id: str = ""
+    client: TestClient, name: str, project_id: str = "", headers: Dict[str, str] = None
 ) -> Dict[str, Any]:
-    """Create a project using the API.
-
-    Args:
-        client (TestClient): FastAPI test client.
-        name (str): Project name.
-        project_id (str): Optional explicit project id.
-
-    Returns:
-        Dict[str, Any]: Created project payload.
-
-    Raises:
-        AssertionError: If the API response is not successful.
-    """
     payload: Dict[str, Any] = {"name": name}
     if project_id:
         payload["id"] = project_id
-    response = client.post("/api/projects", json=payload)
+    response = client.post("/api/projects", json=payload, headers=headers)
     assert response.status_code == 201
     return response.json()
 
 
 def create_task(
-    client: TestClient, project_id: str, name: str, task_id: str = ""
+    client: TestClient, project_id: str, name: str, task_id: str = "", headers: Dict[str, str] = None
 ) -> Dict[str, Any]:
-    """Create a task using the API.
-
-    Args:
-        client (TestClient): FastAPI test client.
-        project_id (str): Parent project id.
-        name (str): Task name.
-        task_id (str): Optional explicit task id.
-
-    Returns:
-        Dict[str, Any]: Created task payload.
-
-    Raises:
-        AssertionError: If the API response is not successful.
-    """
     payload: Dict[str, Any] = {
         "name": name,
         "points": 5,
@@ -67,27 +51,14 @@ def create_task(
     }
     if task_id:
         payload["id"] = task_id
-    response = client.post(f"/api/projects/{project_id}/tasks", json=payload)
+    response = client.post(f"/api/projects/{project_id}/tasks", json=payload, headers=headers)
     assert response.status_code == 201
     return response.json()
 
 
-def create_log(client: TestClient, task_id: str, content: str) -> Dict[str, Any]:
-    """Create a log entry using the API.
-
-    Args:
-        client (TestClient): FastAPI test client.
-        task_id (str): Parent task id.
-        content (str): Log content.
-
-    Returns:
-        Dict[str, Any]: Created log payload.
-
-    Raises:
-        AssertionError: If the API response is not successful.
-    """
+def create_log(client: TestClient, task_id: str, content: str, headers: Dict[str, str] = None) -> Dict[str, Any]:
     payload = {"date": "2024-01-10", "content": content}
-    response = client.post(f"/api/tasks/{task_id}/logs", json=payload)
+    response = client.post(f"/api/tasks/{task_id}/logs", json=payload, headers=headers)
     assert response.status_code == 201
     return response.json()
 
@@ -96,222 +67,153 @@ def create_log(client: TestClient, task_id: str, content: str) -> Dict[str, Any]
 def client(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Generator[TestClient, None, None]:
-    """Provide a test client backed by an isolated SQLite database.
-
-    Args:
-        tmp_path (Path): Pytest temporary directory.
-        monkeypatch (pytest.MonkeyPatch): Pytest monkeypatch fixture.
-
-    Returns:
-        Generator[TestClient, None, None]: Test client generator.
-    """
     db_path = tmp_path / "test.sqlite3"
     monkeypatch.setattr(db, "DB_PATH", db_path)
     with TestClient(main.app) as test_client:
         yield test_client
 
 
+@pytest.fixture()
+def auth(client: TestClient) -> Dict[str, str]:
+    """Return auth headers for an admin user."""
+    return _auth_headers(client)
+
+
 def test_health_check_returns_ok(client: TestClient) -> None:
-    """Verify that the health endpoint returns ok.
-
-    Args:
-        client (TestClient): FastAPI test client.
-
-    Returns:
-        None.
-
-    Raises:
-        AssertionError: If the response is not ok.
-    """
     response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-def test_project_crud_flow(client: TestClient) -> None:
-    """Verify create, read, update, delete flow for projects.
+def test_unauthenticated_access_returns_401(client: TestClient) -> None:
+    response = client.get("/api/projects")
+    assert response.status_code == 401
 
-    Args:
-        client (TestClient): FastAPI test client.
 
-    Returns:
-        None.
-
-    Raises:
-        AssertionError: If the API flow does not behave as expected.
-    """
-    project = create_project(client, name="Alpha")
+def test_project_crud_flow(client: TestClient, auth: Dict[str, str]) -> None:
+    project = create_project(client, name="Alpha", headers=auth)
     project_id = project["id"]
 
-    list_response = client.get("/api/projects")
+    list_response = client.get("/api/projects", headers=auth)
     assert list_response.status_code == 200
     ids = [item["id"] for item in list_response.json()]
     assert project_id in ids
 
-    get_response = client.get(f"/api/projects/{project_id}")
+    get_response = client.get(f"/api/projects/{project_id}", headers=auth)
     assert get_response.status_code == 200
     assert get_response.json()["name"] == "Alpha"
 
     update_response = client.patch(
-        f"/api/projects/{project_id}", json={"name": "Alpha Updated"}
+        f"/api/projects/{project_id}", json={"name": "Alpha Updated"}, headers=auth
     )
     assert update_response.status_code == 200
     assert update_response.json()["name"] == "Alpha Updated"
 
-    delete_response = client.delete(f"/api/projects/{project_id}")
+    delete_response = client.delete(f"/api/projects/{project_id}", headers=auth)
     assert delete_response.status_code == 204
 
-    missing_response = client.get(f"/api/projects/{project_id}")
+    missing_response = client.get(f"/api/projects/{project_id}", headers=auth)
     assert missing_response.status_code == 404
 
 
-def test_task_crud_flow(client: TestClient) -> None:
-    """Verify create, update, delete flow for tasks.
-
-    Args:
-        client (TestClient): FastAPI test client.
-
-    Returns:
-        None.
-
-    Raises:
-        AssertionError: If the API flow does not behave as expected.
-    """
-    project = create_project(client, name="Task Project")
+def test_task_crud_flow(client: TestClient, auth: Dict[str, str]) -> None:
+    project = create_project(client, name="Task Project", headers=auth)
     project_id = project["id"]
 
-    task = create_task(client, project_id=project_id, name="Design API")
+    task = create_task(client, project_id=project_id, name="Design API", headers=auth)
     task_id = task["id"]
     assert task["showLabel"] is True
 
     update_response = client.patch(
-        f"/api/tasks/{task_id}", json={"points": 8, "showLabel": False}
+        f"/api/tasks/{task_id}", json={"points": 8, "showLabel": False}, headers=auth
     )
     assert update_response.status_code == 200
     assert update_response.json()["points"] == 8
     assert update_response.json()["showLabel"] is False
 
-    project_response = client.get(f"/api/projects/{project_id}")
+    project_response = client.get(f"/api/projects/{project_id}", headers=auth)
     assert project_response.status_code == 200
     tasks = project_response.json()["tasks"]
     assert len(tasks) == 1
     assert tasks[0]["id"] == task_id
 
-    delete_response = client.delete(f"/api/tasks/{task_id}")
+    delete_response = client.delete(f"/api/tasks/{task_id}", headers=auth)
     assert delete_response.status_code == 204
 
-    project_response = client.get(f"/api/projects/{project_id}")
+    project_response = client.get(f"/api/projects/{project_id}", headers=auth)
     assert project_response.status_code == 200
     assert project_response.json()["tasks"] == []
 
 
-def test_task_progress_field(client: TestClient) -> None:
-    """Task has a progress field that can be set and updated (0-100)."""
-    project = create_project(client, name="Progress Project")
-    task = create_task(client, project["id"], "Progress Task")
+def test_task_progress_field(client: TestClient, auth: Dict[str, str]) -> None:
+    project = create_project(client, name="Progress Project", headers=auth)
+    task = create_task(client, project["id"], "Progress Task", headers=auth)
 
-    # Default progress is 0
     assert task["progress"] == 0
 
-    # Update progress
-    resp = client.patch(f"/api/tasks/{task['id']}", json={"progress": 75})
+    resp = client.patch(f"/api/tasks/{task['id']}", json={"progress": 75}, headers=auth)
     assert resp.status_code == 200
     assert resp.json()["progress"] == 75
 
-    # Verify via project fetch
-    proj = client.get(f"/api/projects/{project['id']}").json()
+    proj = client.get(f"/api/projects/{project['id']}", headers=auth).json()
     assert proj["tasks"][0]["progress"] == 75
 
-    # Boundary: 100
-    resp = client.patch(f"/api/tasks/{task['id']}", json={"progress": 100})
+    resp = client.patch(f"/api/tasks/{task['id']}", json={"progress": 100}, headers=auth)
     assert resp.status_code == 200
     assert resp.json()["progress"] == 100
 
 
-def test_log_crud_flow(client: TestClient) -> None:
-    """Verify create and delete flow for logs.
+def test_log_crud_flow(client: TestClient, auth: Dict[str, str]) -> None:
+    project = create_project(client, name="Log Project", headers=auth)
+    task = create_task(client, project_id=project["id"], name="Write Docs", headers=auth)
 
-    Args:
-        client (TestClient): FastAPI test client.
-
-    Returns:
-        None.
-
-    Raises:
-        AssertionError: If the API flow does not behave as expected.
-    """
-    project = create_project(client, name="Log Project")
-    task = create_task(client, project_id=project["id"], name="Write Docs")
-
-    log = create_log(client, task_id=task["id"], content="First note")
+    log = create_log(client, task_id=task["id"], content="First note", headers=auth)
     assert log["content"] == "First note"
 
-    project_response = client.get(f"/api/projects/{project['id']}")
+    project_response = client.get(f"/api/projects/{project['id']}", headers=auth)
     assert project_response.status_code == 200
     tasks = project_response.json()["tasks"]
     assert len(tasks) == 1
     assert tasks[0]["logs"][0]["id"] == log["id"]
 
-    delete_response = client.delete(f"/api/logs/{log['id']}")
+    delete_response = client.delete(f"/api/logs/{log['id']}", headers=auth)
     assert delete_response.status_code == 204
 
-    project_response = client.get(f"/api/projects/{project['id']}")
+    project_response = client.get(f"/api/projects/{project['id']}", headers=auth)
     assert project_response.status_code == 200
     assert project_response.json()["tasks"][0]["logs"] == []
 
 
-def test_duplicate_ids_return_conflict(client: TestClient) -> None:
-    """Verify duplicate identifiers return conflict responses.
-
-    Args:
-        client (TestClient): FastAPI test client.
-
-    Returns:
-        None.
-
-    Raises:
-        AssertionError: If the API does not return conflict responses.
-    """
+def test_duplicate_ids_return_conflict(client: TestClient, auth: Dict[str, str]) -> None:
     project_id = "proj_fixed"
-    create_project(client, name="Primary", project_id=project_id)
+    create_project(client, name="Primary", project_id=project_id, headers=auth)
 
     duplicate_project = client.post(
-        "/api/projects", json={"id": project_id, "name": "Duplicate"}
+        "/api/projects", json={"id": project_id, "name": "Duplicate"}, headers=auth
     )
     assert duplicate_project.status_code == 409
 
     task_id = "task_fixed"
-    create_task(client, project_id=project_id, name="Initial Task", task_id=task_id)
+    create_task(client, project_id=project_id, name="Initial Task", task_id=task_id, headers=auth)
     duplicate_task = client.post(
         f"/api/projects/{project_id}/tasks",
         json={"id": task_id, "name": "Duplicate Task", "points": 1},
+        headers=auth,
     )
     assert duplicate_task.status_code == 409
 
 
-def test_missing_project_returns_404(client: TestClient) -> None:
-    """Verify missing resources return 404 responses.
-
-    Args:
-        client (TestClient): FastAPI test client.
-
-    Returns:
-        None.
-
-    Raises:
-        AssertionError: If the API does not return 404 responses.
-    """
-    response = client.get("/api/projects/does-not-exist")
+def test_missing_project_returns_404(client: TestClient, auth: Dict[str, str]) -> None:
+    response = client.get("/api/projects/does-not-exist", headers=auth)
     assert response.status_code == 404
 
     response = client.post(
-        "/api/projects/does-not-exist/tasks", json={"name": "Ghost Task", "points": 1}
+        "/api/projects/does-not-exist/tasks", json={"name": "Ghost Task", "points": 1}, headers=auth
     )
     assert response.status_code == 404
 
 
 def test_statuses_table_exists(client: TestClient) -> None:
-    """Verify that the statuses table is created on startup."""
     with db.get_connection() as conn:
         row = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='statuses'"
@@ -321,7 +223,6 @@ def test_statuses_table_exists(client: TestClient) -> None:
 
 
 def test_default_statuses_seeded(client: TestClient) -> None:
-    """Verify that 3 default statuses are seeded on startup."""
     with db.get_connection() as conn:
         rows = conn.execute("SELECT * FROM statuses ORDER BY sort_order").fetchall()
     assert len(rows) == 3
@@ -337,7 +238,6 @@ def test_default_statuses_seeded(client: TestClient) -> None:
 
 
 def test_todos_table_exists(client: TestClient) -> None:
-    """Verify that the todos table is created on startup."""
     with db.get_connection() as conn:
         row = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name='todos'"
@@ -352,165 +252,146 @@ def test_todos_table_exists(client: TestClient) -> None:
 
 
 def create_status(
-    client: TestClient, name: str, sort_order: float = None
+    client: TestClient, name: str, sort_order: float = None, headers: Dict[str, str] = None
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = {"name": name}
     if sort_order is not None:
         payload["sort_order"] = sort_order
-    response = client.post("/api/statuses", json=payload)
+    response = client.post("/api/statuses", json=payload, headers=headers)
     assert response.status_code == 201
     return response.json()
 
 
-def test_list_statuses(client: TestClient) -> None:
-    """GET /api/statuses returns default 3 statuses in order."""
-    response = client.get("/api/statuses")
+def test_list_statuses(client: TestClient, auth: Dict[str, str]) -> None:
+    response = client.get("/api/statuses", headers=auth)
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 3
     assert data[0]["name"] == "待辦"
     assert data[1]["name"] == "進行中"
     assert data[2]["name"] == "已完成"
-    # verify ordering
     assert data[0]["sortOrder"] < data[1]["sortOrder"] < data[2]["sortOrder"]
 
 
-def test_create_status(client: TestClient) -> None:
-    """POST /api/statuses creates a new status with auto sort_order."""
-    s = create_status(client, "Review")
+def test_create_status(client: TestClient, auth: Dict[str, str]) -> None:
+    s = create_status(client, "Review", headers=auth)
     assert s["name"] == "Review"
     assert s["id"].startswith("status_")
     assert s["isDefaultStart"] is False
     assert s["isDefaultEnd"] is False
-    # sort_order should be after the max existing (2)
     assert s["sortOrder"] > 2
 
 
-def test_create_status_with_sort_order(client: TestClient) -> None:
-    """POST /api/statuses respects explicit sort_order."""
-    s = create_status(client, "QA", sort_order=1.5)
+def test_create_status_with_sort_order(client: TestClient, auth: Dict[str, str]) -> None:
+    s = create_status(client, "QA", sort_order=1.5, headers=auth)
     assert s["sortOrder"] == 1.5
 
 
-def test_create_status_empty_name_rejected(client: TestClient) -> None:
-    """POST /api/statuses rejects empty name with 400."""
-    response = client.post("/api/statuses", json={"name": ""})
+def test_create_status_empty_name_rejected(client: TestClient, auth: Dict[str, str]) -> None:
+    response = client.post("/api/statuses", json={"name": ""}, headers=auth)
     assert response.status_code == 400
 
-    response = client.post("/api/statuses", json={"name": "   "})
+    response = client.post("/api/statuses", json={"name": "   "}, headers=auth)
     assert response.status_code == 400
 
 
-def test_update_status_name(client: TestClient) -> None:
-    """PATCH /api/statuses/:id updates name."""
-    s = create_status(client, "Draft")
-    response = client.patch(f"/api/statuses/{s['id']}", json={"name": "Draft v2"})
+def test_update_status_name(client: TestClient, auth: Dict[str, str]) -> None:
+    s = create_status(client, "Draft", headers=auth)
+    response = client.patch(f"/api/statuses/{s['id']}", json={"name": "Draft v2"}, headers=auth)
     assert response.status_code == 200
     assert response.json()["name"] == "Draft v2"
 
 
-def test_update_status_default_start(client: TestClient) -> None:
-    """Setting is_default_start=true clears old start."""
-    # Get current statuses
-    statuses = client.get("/api/statuses").json()
+def test_update_status_default_start(client: TestClient, auth: Dict[str, str]) -> None:
+    statuses = client.get("/api/statuses", headers=auth).json()
     old_start = [s for s in statuses if s["isDefaultStart"]][0]
 
-    new_s = create_status(client, "New Start")
+    new_s = create_status(client, "New Start", headers=auth)
     response = client.patch(
         f"/api/statuses/{new_s['id']}",
         json={"is_default_start": True},
+        headers=auth,
     )
     assert response.status_code == 200
     assert response.json()["isDefaultStart"] is True
 
-    # Old start should be cleared
-    old_response = client.get("/api/statuses")
+    old_response = client.get("/api/statuses", headers=auth)
     updated = {s["id"]: s for s in old_response.json()}
     assert updated[old_start["id"]]["isDefaultStart"] is False
     assert updated[new_s["id"]]["isDefaultStart"] is True
 
 
-def test_update_status_default_end(client: TestClient) -> None:
-    """Setting is_default_end=true clears old end."""
-    statuses = client.get("/api/statuses").json()
+def test_update_status_default_end(client: TestClient, auth: Dict[str, str]) -> None:
+    statuses = client.get("/api/statuses", headers=auth).json()
     old_end = [s for s in statuses if s["isDefaultEnd"]][0]
 
-    new_s = create_status(client, "New End")
+    new_s = create_status(client, "New End", headers=auth)
     response = client.patch(
         f"/api/statuses/{new_s['id']}",
         json={"is_default_end": True},
+        headers=auth,
     )
     assert response.status_code == 200
     assert response.json()["isDefaultEnd"] is True
 
-    updated = {s["id"]: s for s in client.get("/api/statuses").json()}
+    updated = {s["id"]: s for s in client.get("/api/statuses", headers=auth).json()}
     assert updated[old_end["id"]]["isDefaultEnd"] is False
     assert updated[new_s["id"]]["isDefaultEnd"] is True
 
 
-def test_update_status_not_found(client: TestClient) -> None:
-    """PATCH /api/statuses/:id returns 404 for missing status."""
-    response = client.patch("/api/statuses/nonexistent", json={"name": "X"})
+def test_update_status_not_found(client: TestClient, auth: Dict[str, str]) -> None:
+    response = client.patch("/api/statuses/nonexistent", json={"name": "X"}, headers=auth)
     assert response.status_code == 404
 
 
-def test_update_status_empty_name_rejected(client: TestClient) -> None:
-    """PATCH /api/statuses/:id rejects empty name with 400."""
-    s = create_status(client, "Temp")
-    response = client.patch(f"/api/statuses/{s['id']}", json={"name": ""})
+def test_update_status_empty_name_rejected(client: TestClient, auth: Dict[str, str]) -> None:
+    s = create_status(client, "Temp", headers=auth)
+    response = client.patch(f"/api/statuses/{s['id']}", json={"name": ""}, headers=auth)
     assert response.status_code == 400
 
-    response = client.patch(f"/api/statuses/{s['id']}", json={"name": "   "})
+    response = client.patch(f"/api/statuses/{s['id']}", json={"name": "   "}, headers=auth)
     assert response.status_code == 400
 
 
-def test_delete_status_no_todos(client: TestClient) -> None:
-    """DELETE /api/statuses/:id removes status with no todos."""
-    s = create_status(client, "Disposable")
-    response = client.delete(f"/api/statuses/{s['id']}")
+def test_delete_status_no_todos(client: TestClient, auth: Dict[str, str]) -> None:
+    s = create_status(client, "Disposable", headers=auth)
+    response = client.delete(f"/api/statuses/{s['id']}", headers=auth)
     assert response.status_code == 204
 
-    # Verify it's gone
-    statuses = client.get("/api/statuses").json()
+    statuses = client.get("/api/statuses", headers=auth).json()
     ids = [st["id"] for st in statuses]
     assert s["id"] not in ids
 
 
-def test_delete_default_start_rejected(client: TestClient) -> None:
-    """DELETE rejects deleting the default start status with 400."""
-    statuses = client.get("/api/statuses").json()
+def test_delete_default_start_rejected(client: TestClient, auth: Dict[str, str]) -> None:
+    statuses = client.get("/api/statuses", headers=auth).json()
     start_status = [s for s in statuses if s["isDefaultStart"]][0]
-    response = client.delete(f"/api/statuses/{start_status['id']}")
+    response = client.delete(f"/api/statuses/{start_status['id']}", headers=auth)
     assert response.status_code == 400
 
 
-def test_delete_default_end_rejected(client: TestClient) -> None:
-    """DELETE rejects deleting the default end status with 400."""
-    statuses = client.get("/api/statuses").json()
+def test_delete_default_end_rejected(client: TestClient, auth: Dict[str, str]) -> None:
+    statuses = client.get("/api/statuses", headers=auth).json()
     end_status = [s for s in statuses if s["isDefaultEnd"]][0]
-    response = client.delete(f"/api/statuses/{end_status['id']}")
+    response = client.delete(f"/api/statuses/{end_status['id']}", headers=auth)
     assert response.status_code == 400
 
 
-def test_delete_status_not_found(client: TestClient) -> None:
-    """DELETE /api/statuses/:id returns 404 for missing status."""
-    response = client.delete("/api/statuses/nonexistent")
+def test_delete_status_not_found(client: TestClient, auth: Dict[str, str]) -> None:
+    response = client.delete("/api/statuses/nonexistent", headers=auth)
     assert response.status_code == 404
 
 
-def test_reorder_statuses(client: TestClient) -> None:
-    """POST /api/statuses/reorder batch-updates sort_order."""
-    statuses = client.get("/api/statuses").json()
-    # Reverse the order
+def test_reorder_statuses(client: TestClient, auth: Dict[str, str]) -> None:
+    statuses = client.get("/api/statuses", headers=auth).json()
     reorder_payload = [
         {"id": statuses[0]["id"], "sortOrder": 3.0},
         {"id": statuses[1]["id"], "sortOrder": 2.0},
         {"id": statuses[2]["id"], "sortOrder": 1.0},
     ]
-    response = client.post("/api/statuses/reorder", json=reorder_payload)
+    response = client.post("/api/statuses/reorder", json=reorder_payload, headers=auth)
     assert response.status_code == 200
     result = response.json()
-    # Should be returned in new order
     assert result[0]["name"] == "已完成"
     assert result[1]["name"] == "進行中"
     assert result[2]["name"] == "待辦"
@@ -521,35 +402,30 @@ def test_reorder_statuses(client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def create_todo(client: TestClient, title: str, **kwargs: Any) -> Dict[str, Any]:
+def create_todo(client: TestClient, title: str, headers: Dict[str, str] = None, **kwargs: Any) -> Dict[str, Any]:
     payload: Dict[str, Any] = {"title": title}
     payload.update(kwargs)
-    response = client.post("/api/todos", json=payload)
+    response = client.post("/api/todos", json=payload, headers=headers)
     assert response.status_code == 201
     return response.json()
 
 
-def test_todo_crud_flow(client: TestClient) -> None:
-    """Create, list, update, delete flow for todos."""
-    # Create with title + priority + tags
+def test_todo_crud_flow(client: TestClient, auth: Dict[str, str]) -> None:
     todo = create_todo(
-        client, "Buy milk", priority="high", tags=["groceries", "urgent"]
+        client, "Buy milk", headers=auth, priority="high", tags=["groceries", "urgent"]
     )
     assert todo["title"] == "Buy milk"
     assert todo["priority"] == "high"
     assert todo["tags"] == ["groceries", "urgent"]
     assert todo["id"].startswith("todo_")
-    # status should be the default start status ID (not a hardcoded string)
-    statuses = client.get("/api/statuses").json()
+    statuses = client.get("/api/statuses", headers=auth).json()
     start_status = [s for s in statuses if s["isDefaultStart"]][0]
     assert todo["status"] == start_status["id"]
 
-    # List
-    response = client.get("/api/todos")
+    response = client.get("/api/todos", headers=auth)
     assert response.status_code == 200
     assert len(response.json()) == 1
 
-    # Update title + status
     other_status = [s for s in statuses if not s["isDefaultStart"]][0]
     response = client.patch(
         f"/api/todos/{todo['id']}",
@@ -557,94 +433,86 @@ def test_todo_crud_flow(client: TestClient) -> None:
             "title": "Buy oat milk",
             "status": other_status["id"],
         },
+        headers=auth,
     )
     assert response.status_code == 200
     updated = response.json()
     assert updated["title"] == "Buy oat milk"
     assert updated["status"] == other_status["id"]
 
-    # Delete
-    response = client.delete(f"/api/todos/{todo['id']}")
+    response = client.delete(f"/api/todos/{todo['id']}", headers=auth)
     assert response.status_code == 204
 
-    # Verify gone
-    response = client.get("/api/todos")
+    response = client.get("/api/todos", headers=auth)
     assert response.status_code == 200
     assert len(response.json()) == 0
 
 
-def test_todo_default_status_is_start(client: TestClient) -> None:
-    """Creating without explicit status uses start status ID."""
-    statuses = client.get("/api/statuses").json()
+def test_todo_default_status_is_start(client: TestClient, auth: Dict[str, str]) -> None:
+    statuses = client.get("/api/statuses", headers=auth).json()
     start_status = [s for s in statuses if s["isDefaultStart"]][0]
 
-    todo = create_todo(client, "No status specified")
+    todo = create_todo(client, "No status specified", headers=auth)
     assert todo["status"] == start_status["id"]
 
 
-def test_todo_with_explicit_status(client: TestClient) -> None:
-    """Creating with valid status ID works."""
-    statuses = client.get("/api/statuses").json()
-    chosen = statuses[1]  # pick the middle one
+def test_todo_with_explicit_status(client: TestClient, auth: Dict[str, str]) -> None:
+    statuses = client.get("/api/statuses", headers=auth).json()
+    chosen = statuses[1]
 
-    todo = create_todo(client, "Explicit status", status=chosen["id"])
+    todo = create_todo(client, "Explicit status", headers=auth, status=chosen["id"])
     assert todo["status"] == chosen["id"]
 
 
-def test_todo_invalid_status_rejected(client: TestClient) -> None:
-    """Creating with invalid status returns 400."""
+def test_todo_invalid_status_rejected(client: TestClient, auth: Dict[str, str]) -> None:
     response = client.post(
         "/api/todos",
         json={
             "title": "Bad status",
             "status": "nonexistent",
         },
+        headers=auth,
     )
     assert response.status_code == 400
 
 
-def test_todo_update_invalid_status_rejected(client: TestClient) -> None:
-    """Updating with invalid status returns 400."""
-    todo = create_todo(client, "Will try bad update")
+def test_todo_update_invalid_status_rejected(client: TestClient, auth: Dict[str, str]) -> None:
+    todo = create_todo(client, "Will try bad update", headers=auth)
     response = client.patch(
         f"/api/todos/{todo['id']}",
         json={
             "status": "nonexistent",
         },
+        headers=auth,
     )
     assert response.status_code == 400
 
 
-def test_todo_linked_to_task(client: TestClient) -> None:
-    """Can link to burnup tasks, GET /api/tasks/:id/todos works."""
-    project = create_project(client, "Link Project")
-    task = create_task(client, project["id"], "Link Task")
+def test_todo_linked_to_task(client: TestClient, auth: Dict[str, str]) -> None:
+    project = create_project(client, "Link Project", headers=auth)
+    task = create_task(client, project["id"], "Link Task", headers=auth)
 
-    todo = create_todo(client, "Linked todo", linkedTaskId=task["id"])
+    todo = create_todo(client, "Linked todo", headers=auth, linkedTaskId=task["id"])
     assert todo["linkedTaskId"] == task["id"]
 
-    # GET /api/tasks/:id/todos
-    response = client.get(f"/api/tasks/{task['id']}/todos")
+    response = client.get(f"/api/tasks/{task['id']}/todos", headers=auth)
     assert response.status_code == 200
     todos = response.json()
     assert len(todos) == 1
     assert todos[0]["id"] == todo["id"]
 
 
-def test_todo_unlinked_when_task_deleted(client: TestClient) -> None:
-    """linkedTaskId cleared when task deleted (ON DELETE SET NULL)."""
-    project = create_project(client, "Unlink Project")
-    task = create_task(client, project["id"], "Unlink Task")
+def test_todo_unlinked_when_task_deleted(client: TestClient, auth: Dict[str, str]) -> None:
+    project = create_project(client, "Unlink Project", headers=auth)
+    task = create_task(client, project["id"], "Unlink Task", headers=auth)
 
-    todo = create_todo(client, "Will be unlinked", linkedTaskId=task["id"])
+    todo = create_todo(client, "Will be unlinked", headers=auth, linkedTaskId=task["id"])
     assert todo["linkedTaskId"] == task["id"]
 
-    # Delete the task
-    response = client.delete(f"/api/tasks/{task['id']}")
+    response = client.delete(f"/api/tasks/{task['id']}", headers=auth)
     assert response.status_code == 204
 
-    # Todo should still exist but linkedTaskId is None
-    response = client.get("/api/todos")
+    response = client.get("/api/todos", headers=auth)
     assert response.status_code == 200
     todos = response.json()
     found = [t for t in todos if t["id"] == todo["id"]]
@@ -652,12 +520,11 @@ def test_todo_unlinked_when_task_deleted(client: TestClient) -> None:
     assert found[0]["linkedTaskId"] is None
 
 
-def test_todo_not_found(client: TestClient) -> None:
-    """PATCH/DELETE return 404 for missing todo."""
-    response = client.patch("/api/todos/nonexistent", json={"title": "X"})
+def test_todo_not_found(client: TestClient, auth: Dict[str, str]) -> None:
+    response = client.patch("/api/todos/nonexistent", json={"title": "X"}, headers=auth)
     assert response.status_code == 404
 
-    response = client.delete("/api/todos/nonexistent")
+    response = client.delete("/api/todos/nonexistent", headers=auth)
     assert response.status_code == 404
 
 
@@ -666,20 +533,17 @@ def test_todo_not_found(client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_todo_comments_included_in_todo(client: TestClient) -> None:
-    """Todos include a comments array."""
-    todo = create_todo(client, "Has comments field")
+def test_todo_comments_included_in_todo(client: TestClient, auth: Dict[str, str]) -> None:
+    todo = create_todo(client, "Has comments field", headers=auth)
     assert "comments" in todo
     assert todo["comments"] == []
 
 
-def test_todo_comment_crud(client: TestClient) -> None:
-    """Create, list (via todo), update, and delete a comment."""
-    todo = create_todo(client, "Commentable")
+def test_todo_comment_crud(client: TestClient, auth: Dict[str, str]) -> None:
+    todo = create_todo(client, "Commentable", headers=auth)
 
-    # Create comment
     resp = client.post(
-        f"/api/todos/{todo['id']}/comments", json={"content": "First note"}
+        f"/api/todos/{todo['id']}/comments", json={"content": "First note"}, headers=auth
     )
     assert resp.status_code == 201
     comment = resp.json()
@@ -687,57 +551,165 @@ def test_todo_comment_crud(client: TestClient) -> None:
     assert comment["todoId"] == todo["id"]
     assert comment["createdAt"] == comment["updatedAt"]
 
-    # Comment appears when listing todos
-    todos = client.get("/api/todos").json()
+    todos = client.get("/api/todos", headers=auth).json()
     found = [t for t in todos if t["id"] == todo["id"]][0]
     assert len(found["comments"]) == 1
     assert found["comments"][0]["id"] == comment["id"]
 
-    # Update comment
     resp = client.patch(
-        f"/api/todo-comments/{comment['id']}", json={"content": "Updated note"}
+        f"/api/todo-comments/{comment['id']}", json={"content": "Updated note"}, headers=auth
     )
     assert resp.status_code == 200
     updated = resp.json()
     assert updated["content"] == "Updated note"
     assert updated["updatedAt"] != updated["createdAt"]
 
-    # Delete comment
-    resp = client.delete(f"/api/todo-comments/{comment['id']}")
+    resp = client.delete(f"/api/todo-comments/{comment['id']}", headers=auth)
     assert resp.status_code == 204
 
-    # Confirm gone
-    todos = client.get("/api/todos").json()
+    todos = client.get("/api/todos", headers=auth).json()
     found = [t for t in todos if t["id"] == todo["id"]][0]
     assert len(found["comments"]) == 0
 
 
-def test_todo_comment_on_nonexistent_todo(client: TestClient) -> None:
-    """Creating a comment on a non-existent todo returns 404."""
-    resp = client.post("/api/todos/nonexistent/comments", json={"content": "Nope"})
+def test_todo_comment_on_nonexistent_todo(client: TestClient, auth: Dict[str, str]) -> None:
+    resp = client.post("/api/todos/nonexistent/comments", json={"content": "Nope"}, headers=auth)
     assert resp.status_code == 404
 
 
-def test_todo_comment_not_found(client: TestClient) -> None:
-    """Updating/deleting a non-existent comment returns 404."""
-    resp = client.patch("/api/todo-comments/nonexistent", json={"content": "X"})
+def test_todo_comment_not_found(client: TestClient, auth: Dict[str, str]) -> None:
+    resp = client.patch("/api/todo-comments/nonexistent", json={"content": "X"}, headers=auth)
     assert resp.status_code == 404
 
-    resp = client.delete("/api/todo-comments/nonexistent")
+    resp = client.delete("/api/todo-comments/nonexistent", headers=auth)
     assert resp.status_code == 404
 
 
-def test_todo_comments_cascade_on_delete(client: TestClient) -> None:
-    """Comments are deleted when their parent todo is deleted."""
-    todo = create_todo(client, "Will be deleted")
-    client.post(f"/api/todos/{todo['id']}/comments", json={"content": "Orphan?"})
+def test_todo_comments_cascade_on_delete(client: TestClient, auth: Dict[str, str]) -> None:
+    todo = create_todo(client, "Will be deleted", headers=auth)
+    client.post(f"/api/todos/{todo['id']}/comments", json={"content": "Orphan?"}, headers=auth)
 
-    # Delete todo
-    resp = client.delete(f"/api/todos/{todo['id']}")
+    resp = client.delete(f"/api/todos/{todo['id']}", headers=auth)
     assert resp.status_code == 204
 
-    # Comment should be gone (no orphans in list)
-    todos = client.get("/api/todos").json()
+    todos = client.get("/api/todos", headers=auth).json()
     for t in todos:
         for c in t.get("comments", []):
             assert c["todoId"] != todo["id"]
+
+
+# ---------------------------------------------------------------------------
+# Auth Tests
+# ---------------------------------------------------------------------------
+
+
+def test_bootstrap_creates_admin(client: TestClient) -> None:
+    resp = client.get("/api/auth/status")
+    assert resp.status_code == 200
+    assert resp.json()["initialized"] is False
+
+    resp = client.post(
+        "/api/auth/bootstrap",
+        json={"username": "admin1", "password": "password123"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["user"]["role"] == "admin"
+    assert data["access_token"]
+    assert data["refresh_token"]
+
+    resp = client.get("/api/auth/status")
+    assert resp.json()["initialized"] is True
+
+
+def test_bootstrap_fails_when_users_exist(client: TestClient, auth: Dict[str, str]) -> None:
+    resp = client.post(
+        "/api/auth/bootstrap",
+        json={"username": "another", "password": "password123"},
+    )
+    assert resp.status_code == 403
+
+
+def test_login_and_refresh(client: TestClient) -> None:
+    # Bootstrap first
+    client.post(
+        "/api/auth/bootstrap",
+        json={"username": "logintest", "password": "password123"},
+    )
+
+    # Login
+    resp = client.post(
+        "/api/auth/login",
+        json={"username": "logintest", "password": "password123"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["access_token"]
+    refresh_token = data["refresh_token"]
+
+    # Refresh
+    resp = client.post(
+        "/api/auth/refresh",
+        json={"refresh_token": refresh_token},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["access_token"]
+
+
+def test_login_wrong_password(client: TestClient) -> None:
+    client.post(
+        "/api/auth/bootstrap",
+        json={"username": "wrongpw", "password": "password123"},
+    )
+
+    resp = client.post(
+        "/api/auth/login",
+        json={"username": "wrongpw", "password": "badpassword"},
+    )
+    assert resp.status_code == 401
+
+
+def test_admin_can_create_users(client: TestClient, auth: Dict[str, str]) -> None:
+    resp = client.post(
+        "/api/auth/users",
+        json={
+            "username": "newmember",
+            "display_name": "New Member",
+            "password": "password123",
+            "role": "member",
+        },
+        headers=auth,
+    )
+    assert resp.status_code == 201
+    assert resp.json()["role"] == "member"
+
+    users = client.get("/api/auth/users", headers=auth).json()
+    assert len(users) == 2
+
+
+def test_viewer_cannot_create_project(client: TestClient, auth: Dict[str, str]) -> None:
+    # Create a viewer user
+    client.post(
+        "/api/auth/users",
+        json={
+            "username": "viewer1",
+            "display_name": "Viewer",
+            "password": "password123",
+            "role": "viewer",
+        },
+        headers=auth,
+    )
+    # Login as viewer
+    resp = client.post(
+        "/api/auth/login",
+        json={"username": "viewer1", "password": "password123"},
+    )
+    viewer_auth = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    # Viewer cannot create project
+    resp = client.post("/api/projects", json={"name": "Forbidden"}, headers=viewer_auth)
+    assert resp.status_code == 403
+
+    # Viewer can list projects
+    resp = client.get("/api/projects", headers=viewer_auth)
+    assert resp.status_code == 200

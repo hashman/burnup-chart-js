@@ -4,6 +4,11 @@ import { Upload, Download, Plus, Trash2, Calendar, User, Briefcase, AlertTriangl
 import Holidays from 'date-holidays';
 import TodoBoard from './components/TodoBoard';
 import TodoSection from './components/TodoSection';
+import { requestJson } from './api';
+import { useAuth } from './auth/AuthContext';
+import LoginPage from './auth/LoginPage';
+import UserMenu from './auth/UserMenu';
+import AdminPanel from './auth/AdminPanel';
 
 // --- Utility Functions ---
 
@@ -30,24 +35,6 @@ const addDays = (dateStr, days) => {
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
-
-const requestJson = async (path, options = {}) => {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {})
-    }
-  });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Request failed (${response.status})`);
-  }
-
-  if (response.status === 204) return null;
-  return response.json();
-};
 
 const buildTaskPayload = (task) => ({
   name: task.name || "",
@@ -352,6 +339,32 @@ function MergedProjectModal({ projects, initialSelectedIds, onConfirm, onCancel 
 }
 
 export default function BurnupChartApp() {
+  const { user, isLoading: authLoading, initialized } = useAuth();
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-100 text-gray-600 flex items-center justify-center">
+        <div className="text-sm">載入中...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  return (
+    <>
+      <BurnupChartInner showAdminPanel={showAdminPanel} setShowAdminPanel={setShowAdminPanel} />
+      {showAdminPanel && <AdminPanel onClose={() => setShowAdminPanel(false)} />}
+    </>
+  );
+}
+
+function BurnupChartInner({ showAdminPanel, setShowAdminPanel }) {
+  const { user } = useAuth();
+  const isViewer = user?.role === 'viewer';
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
   const [activeProjectId, setActiveProjectId] = useState(() => {
     const hash = window.location.hash.slice(1);
@@ -2181,7 +2194,7 @@ export default function BurnupChartApp() {
               <Briefcase className="text-indigo-600" />
               <h1 className="text-xl font-bold text-gray-900">專案管理 Burnup</h1>
             </div>
-            <div className="flex space-x-2">
+            <div className="flex items-center space-x-2">
               {!isReadOnly && (
                 <button onClick={() => fileInputRef.current.click()} className="p-2 text-gray-500 hover:text-indigo-600 transition" title="匯入 CSV">
                   <Upload size={20} />
@@ -2191,6 +2204,9 @@ export default function BurnupChartApp() {
               <button onClick={exportCSV} className="p-2 text-gray-500 hover:text-indigo-600 transition" title="匯出 CSV">
                 <Download size={20} />
               </button>
+              <div className="border-l border-gray-200 pl-2 ml-1">
+                <UserMenu onAdminPanel={() => setShowAdminPanel(true)} />
+              </div>
             </div>
           </div>
 

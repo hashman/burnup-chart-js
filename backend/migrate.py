@@ -106,6 +106,75 @@ def create_todo_comments_table(conn: sqlite3.Connection) -> None:
     )
 
 
+# ── Auth migrations ───────────────────────────────────────────────────
+
+
+@migration("create users table")
+def create_users_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            username TEXT NOT NULL UNIQUE,
+            display_name TEXT NOT NULL,
+            email TEXT,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'member',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+
+
+@migration("create refresh_tokens table")
+def create_refresh_tokens_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS refresh_tokens (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            token_hash TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            revoked INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+        """
+    )
+
+
+@migration("add projects.created_by column")
+def add_projects_created_by(conn: sqlite3.Connection) -> None:
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(projects)").fetchall()}
+    if "created_by" not in columns:
+        conn.execute("ALTER TABLE projects ADD COLUMN created_by TEXT")
+
+
+@migration("add todos.created_by column")
+def add_todos_created_by(conn: sqlite3.Connection) -> None:
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(todos)").fetchall()}
+    if "created_by" not in columns:
+        conn.execute("ALTER TABLE todos ADD COLUMN created_by TEXT")
+
+
+@migration("add todo_comments.author_id column")
+def add_todo_comments_author_id(conn: sqlite3.Connection) -> None:
+    columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(todo_comments)").fetchall()
+    }
+    if "author_id" not in columns:
+        conn.execute("ALTER TABLE todo_comments ADD COLUMN author_id TEXT")
+
+
+@migration("add logs.author_id column")
+def add_logs_author_id(conn: sqlite3.Connection) -> None:
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(logs)").fetchall()}
+    if "author_id" not in columns:
+        conn.execute("ALTER TABLE logs ADD COLUMN author_id TEXT")
+
+
 # ── Runner ────────────────────────────────────────────────────────────
 
 

@@ -1,11 +1,20 @@
 import { test, expect } from '@playwright/test';
 import { API_BASE } from './test-config.js';
+import { authHeaders, loginAsAdmin } from './auth-helper.js';
+
+let _headers;
+
+/** Get cached auth headers (initialized in beforeAll). */
+function headers() {
+  if (!_headers) throw new Error('Auth headers not initialized — did beforeAll run?');
+  return _headers;
+}
 
 /** Create a project via API and return its id. */
 async function createProjectViaAPI(name) {
   const res = await fetch(`${API_BASE}/projects`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: headers(),
     body: JSON.stringify({ name }),
   });
   if (!res.ok) throw new Error(`Seed project failed: ${res.status} ${await res.text()}`);
@@ -17,7 +26,7 @@ async function createProjectViaAPI(name) {
 async function createTaskViaAPI(projectId, task) {
   const res = await fetch(`${API_BASE}/projects/${projectId}/tasks`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: headers(),
     body: JSON.stringify(task),
   });
   if (!res.ok) throw new Error(`Seed task failed: ${res.status} ${await res.text()}`);
@@ -27,11 +36,11 @@ async function createTaskViaAPI(projectId, task) {
 
 /** Delete all projects via API to reset DB state. */
 async function deleteAllProjects() {
-  const res = await fetch(`${API_BASE}/projects`);
+  const res = await fetch(`${API_BASE}/projects`, { headers: headers() });
   if (!res.ok) return;
   const projects = await res.json();
   const results = await Promise.all(
-    projects.map((p) => fetch(`${API_BASE}/projects/${p.id}`, { method: 'DELETE' })),
+    projects.map((p) => fetch(`${API_BASE}/projects/${p.id}`, { method: 'DELETE', headers: headers() })),
   );
   const failed = results.filter((r) => !r.ok);
   if (failed.length > 0) {
@@ -53,6 +62,11 @@ async function enterMergedViewViaUI(page) {
   await expect(page.getByText('合併範圍：')).toBeVisible();
 }
 
+// Initialize auth before all tests
+test.beforeAll(async () => {
+  _headers = await authHeaders();
+});
+
 // Clean DB before each test so tests are fully isolated
 test.beforeEach(async () => {
   await deleteAllProjects();
@@ -63,8 +77,7 @@ test.describe('Burnup Chart App 完整流程測試', () => {
     page.locator(`tr[data-task-name="${taskName}"]`);
 
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible();
+    await loginAsAdmin(page, expect);
   });
 
   test('Scenario: 建立新專案並驗證工作日推算邏輯', async ({ page }) => {
@@ -145,9 +158,9 @@ test.describe('Burnup Chart App 完整流程測試', () => {
       expectedStart: '2024-03-01',
     });
 
-    // Reload to pick up the seeded data
+    // Reload to pick up the seeded data (refresh token in localStorage enables auto-login)
     await page.reload();
-    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible({ timeout: 10_000 });
 
     // Switch to the seeded project tab
     await page.getByText('Log Test Project').click();
@@ -183,13 +196,17 @@ test.describe('Burnup Chart App 完整流程測試', () => {
 });
 
 test.describe('合併檢視', () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAsAdmin(page, expect);
+  });
+
   test('Scenario: 首次進入合併 tab 應出現 Modal，確認後顯示 banner', async ({ page }) => {
     // Seed a project so there's something to merge
     await createProjectViaAPI('Merge Seed A');
 
-    await page.goto('/');
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
     await page.reload();
+    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible();
 
     // 點擊合併 tab → Modal 出現
     await page.getByText('合併檢視').click();
@@ -209,9 +226,9 @@ test.describe('合併檢視', () => {
   test('Scenario: 再次進入合併 tab 不再出現 Modal（localStorage 已設定）', async ({ page }) => {
     await createProjectViaAPI('Merge Seed B');
 
-    await page.goto('/');
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
     await page.reload();
+    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible();
 
     // Set up merged view through UI first
     await enterMergedViewViaUI(page);
@@ -229,9 +246,9 @@ test.describe('合併檢視', () => {
   test('Scenario: 合併 tab 唯讀 — 無新增表單、無刪除按鈕', async ({ page }) => {
     await createProjectViaAPI('Merge Seed C');
 
-    await page.goto('/');
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
     await page.reload();
+    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible();
 
     // Set up merged view through UI
     await enterMergedViewViaUI(page);
@@ -245,9 +262,10 @@ test.describe('合併檢視', () => {
 
   test('Scenario: 取消 Modal 應切回上一個 tab', async ({ page }) => {
     await createProjectViaAPI('Cancel Test');
-    await page.goto('/');
+
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
     await page.reload();
+    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible();
 
     // 點合併 tab → Modal 出現
     await page.getByText('合併檢視').click();
@@ -265,9 +283,9 @@ test.describe('合併檢視', () => {
   test('Scenario: 重新設定可更改合併的專案', async ({ page }) => {
     await createProjectViaAPI('Merge Seed D');
 
-    await page.goto('/');
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
     await page.reload();
+    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible();
 
     // Set up merged view through UI
     await enterMergedViewViaUI(page);

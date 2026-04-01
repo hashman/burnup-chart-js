@@ -27,13 +27,14 @@ export default async function globalSetup() {
 
   // 2. Start backend with test DB
   const backend = spawn(
-    'python', ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(TEST_BACKEND_PORT)],
+    'poetry', ['run', 'python', '-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(TEST_BACKEND_PORT)],
     {
       cwd: resolve(import.meta.dirname, '..', 'backend'),
       env: {
         ...process.env,
         BURNUP_DB_PATH: TEST_DB_PATH,
         BURNUP_CORS_ORIGINS: `http://127.0.0.1:${TEST_FRONTEND_PORT},http://127.0.0.1:5173`,
+        BURNUP_JWT_SECRET: 'e2e-test-secret-key-do-not-use-in-production',
       },
       stdio: 'pipe',
     },
