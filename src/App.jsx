@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, ComposedChart, ReferenceLine, ReferenceDot, Label } from 'recharts';
-import { Upload, Download, Plus, Trash2, Calendar, User, Layout, Briefcase, AlertTriangle, CheckCircle2, Filter, Lock, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, Eye, EyeOff, Settings, Percent, MessageSquare, X, Send, Tag, Maximize2, Minimize2, Check, BarChart2, TrendingUp, Clock } from 'lucide-react';
+import { Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, ReferenceLine, ReferenceDot, Label } from 'recharts';
+import { Upload, Download, Plus, Trash2, Calendar, User, Briefcase, AlertTriangle, CheckCircle2, Filter, Lock, ChevronLeft, Eye, EyeOff, Settings, Percent, MessageSquare, X, Send, Tag, Maximize2, Minimize2, BarChart2, TrendingUp, Clock } from 'lucide-react';
 import Holidays from 'date-holidays';
 
 // --- Utility Functions ---
