@@ -11,6 +11,7 @@ fastapi = "0.115.5"
 uvicorn = {version = "0.30.6", extras = ["standard"]}
 numpy = "^2.4.0"
 pandas = "^2.3.3"
+apscheduler = "^3.10"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
