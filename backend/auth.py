@@ -18,9 +18,7 @@ JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(
     os.environ.get("BURNUP_ACCESS_TOKEN_EXPIRE_MINUTES", "30")
 )
-REFRESH_TOKEN_EXPIRE_DAYS = int(
-    os.environ.get("BURNUP_REFRESH_TOKEN_EXPIRE_DAYS", "7")
-)
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.environ.get("BURNUP_REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -96,9 +94,7 @@ def verify_refresh_token(raw_token: str) -> Optional[dict]:
 
 def revoke_refresh_token(token_id: str) -> None:
     with get_connection() as conn:
-        conn.execute(
-            "UPDATE refresh_tokens SET revoked = 1 WHERE id = ?", (token_id,)
-        )
+        conn.execute("UPDATE refresh_tokens SET revoked = 1 WHERE id = ?", (token_id,))
         conn.commit()
 
 
@@ -126,9 +122,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     if not row:
         raise credentials_exception
     if not row["is_active"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="帳號已停用"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="帳號已停用")
 
     return {
         "id": row["id"],

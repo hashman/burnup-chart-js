@@ -152,9 +152,7 @@ def update_me(
         values.append(now)
         values.append(current_user["id"])
         with get_connection() as conn:
-            conn.execute(
-                f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values
-            )
+            conn.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
             conn.commit()
             row = conn.execute(
                 "SELECT * FROM users WHERE id = ?", (current_user["id"],)
@@ -182,9 +180,7 @@ def list_users(
     _current_user: dict = Depends(require_admin),
 ) -> List[Dict[str, Any]]:
     with get_connection() as conn:
-        rows = conn.execute(
-            "SELECT * FROM users ORDER BY created_at"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM users ORDER BY created_at").fetchall()
     return [_row_to_user_out(row) for row in rows]
 
 
@@ -256,9 +252,7 @@ def update_user(
             fields.append("updated_at = ?")
             values.append(now)
             values.append(user_id)
-            conn.execute(
-                f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values
-            )
+            conn.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
             conn.commit()
 
         row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()

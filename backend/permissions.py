@@ -2,9 +2,7 @@
 
 from enum import Enum
 
-from fastapi import Depends
-
-from auth import get_current_user, require_role
+from auth import require_role
 
 
 class SystemRole(str, Enum):

@@ -36,7 +36,11 @@ def create_project(
 
 
 def create_task(
-    client: TestClient, project_id: str, name: str, task_id: str = "", headers: Dict[str, str] = None
+    client: TestClient,
+    project_id: str,
+    name: str,
+    task_id: str = "",
+    headers: Dict[str, str] = None,
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = {
         "name": name,
@@ -51,12 +55,16 @@ def create_task(
     }
     if task_id:
         payload["id"] = task_id
-    response = client.post(f"/api/projects/{project_id}/tasks", json=payload, headers=headers)
+    response = client.post(
+        f"/api/projects/{project_id}/tasks", json=payload, headers=headers
+    )
     assert response.status_code == 201
     return response.json()
 
 
-def create_log(client: TestClient, task_id: str, content: str, headers: Dict[str, str] = None) -> Dict[str, Any]:
+def create_log(
+    client: TestClient, task_id: str, content: str, headers: Dict[str, str] = None
+) -> Dict[str, Any]:
     payload = {"date": "2024-01-10", "content": content}
     response = client.post(f"/api/tasks/{task_id}/logs", json=payload, headers=headers)
     assert response.status_code == 201
@@ -158,14 +166,18 @@ def test_task_progress_field(client: TestClient, auth: Dict[str, str]) -> None:
     proj = client.get(f"/api/projects/{project['id']}", headers=auth).json()
     assert proj["tasks"][0]["progress"] == 75
 
-    resp = client.patch(f"/api/tasks/{task['id']}", json={"progress": 100}, headers=auth)
+    resp = client.patch(
+        f"/api/tasks/{task['id']}", json={"progress": 100}, headers=auth
+    )
     assert resp.status_code == 200
     assert resp.json()["progress"] == 100
 
 
 def test_log_crud_flow(client: TestClient, auth: Dict[str, str]) -> None:
     project = create_project(client, name="Log Project", headers=auth)
-    task = create_task(client, project_id=project["id"], name="Write Docs", headers=auth)
+    task = create_task(
+        client, project_id=project["id"], name="Write Docs", headers=auth
+    )
 
     log = create_log(client, task_id=task["id"], content="First note", headers=auth)
     assert log["content"] == "First note"
@@ -184,7 +196,9 @@ def test_log_crud_flow(client: TestClient, auth: Dict[str, str]) -> None:
     assert project_response.json()["tasks"][0]["logs"] == []
 
 
-def test_duplicate_ids_return_conflict(client: TestClient, auth: Dict[str, str]) -> None:
+def test_duplicate_ids_return_conflict(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
     project_id = "proj_fixed"
     create_project(client, name="Primary", project_id=project_id, headers=auth)
 
@@ -194,7 +208,13 @@ def test_duplicate_ids_return_conflict(client: TestClient, auth: Dict[str, str])
     assert duplicate_project.status_code == 409
 
     task_id = "task_fixed"
-    create_task(client, project_id=project_id, name="Initial Task", task_id=task_id, headers=auth)
+    create_task(
+        client,
+        project_id=project_id,
+        name="Initial Task",
+        task_id=task_id,
+        headers=auth,
+    )
     duplicate_task = client.post(
         f"/api/projects/{project_id}/tasks",
         json={"id": task_id, "name": "Duplicate Task", "points": 1},
@@ -208,7 +228,9 @@ def test_missing_project_returns_404(client: TestClient, auth: Dict[str, str]) -
     assert response.status_code == 404
 
     response = client.post(
-        "/api/projects/does-not-exist/tasks", json={"name": "Ghost Task", "points": 1}, headers=auth
+        "/api/projects/does-not-exist/tasks",
+        json={"name": "Ghost Task", "points": 1},
+        headers=auth,
     )
     assert response.status_code == 404
 
@@ -252,7 +274,10 @@ def test_todos_table_exists(client: TestClient) -> None:
 
 
 def create_status(
-    client: TestClient, name: str, sort_order: float = None, headers: Dict[str, str] = None
+    client: TestClient,
+    name: str,
+    sort_order: float = None,
+    headers: Dict[str, str] = None,
 ) -> Dict[str, Any]:
     payload: Dict[str, Any] = {"name": name}
     if sort_order is not None:
@@ -282,12 +307,16 @@ def test_create_status(client: TestClient, auth: Dict[str, str]) -> None:
     assert s["sortOrder"] > 2
 
 
-def test_create_status_with_sort_order(client: TestClient, auth: Dict[str, str]) -> None:
+def test_create_status_with_sort_order(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
     s = create_status(client, "QA", sort_order=1.5, headers=auth)
     assert s["sortOrder"] == 1.5
 
 
-def test_create_status_empty_name_rejected(client: TestClient, auth: Dict[str, str]) -> None:
+def test_create_status_empty_name_rejected(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
     response = client.post("/api/statuses", json={"name": ""}, headers=auth)
     assert response.status_code == 400
 
@@ -297,7 +326,9 @@ def test_create_status_empty_name_rejected(client: TestClient, auth: Dict[str, s
 
 def test_update_status_name(client: TestClient, auth: Dict[str, str]) -> None:
     s = create_status(client, "Draft", headers=auth)
-    response = client.patch(f"/api/statuses/{s['id']}", json={"name": "Draft v2"}, headers=auth)
+    response = client.patch(
+        f"/api/statuses/{s['id']}", json={"name": "Draft v2"}, headers=auth
+    )
     assert response.status_code == 200
     assert response.json()["name"] == "Draft v2"
 
@@ -340,16 +371,22 @@ def test_update_status_default_end(client: TestClient, auth: Dict[str, str]) -> 
 
 
 def test_update_status_not_found(client: TestClient, auth: Dict[str, str]) -> None:
-    response = client.patch("/api/statuses/nonexistent", json={"name": "X"}, headers=auth)
+    response = client.patch(
+        "/api/statuses/nonexistent", json={"name": "X"}, headers=auth
+    )
     assert response.status_code == 404
 
 
-def test_update_status_empty_name_rejected(client: TestClient, auth: Dict[str, str]) -> None:
+def test_update_status_empty_name_rejected(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
     s = create_status(client, "Temp", headers=auth)
     response = client.patch(f"/api/statuses/{s['id']}", json={"name": ""}, headers=auth)
     assert response.status_code == 400
 
-    response = client.patch(f"/api/statuses/{s['id']}", json={"name": "   "}, headers=auth)
+    response = client.patch(
+        f"/api/statuses/{s['id']}", json={"name": "   "}, headers=auth
+    )
     assert response.status_code == 400
 
 
@@ -363,7 +400,9 @@ def test_delete_status_no_todos(client: TestClient, auth: Dict[str, str]) -> Non
     assert s["id"] not in ids
 
 
-def test_delete_default_start_rejected(client: TestClient, auth: Dict[str, str]) -> None:
+def test_delete_default_start_rejected(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
     statuses = client.get("/api/statuses", headers=auth).json()
     start_status = [s for s in statuses if s["isDefaultStart"]][0]
     response = client.delete(f"/api/statuses/{start_status['id']}", headers=auth)
@@ -402,7 +441,9 @@ def test_reorder_statuses(client: TestClient, auth: Dict[str, str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def create_todo(client: TestClient, title: str, headers: Dict[str, str] = None, **kwargs: Any) -> Dict[str, Any]:
+def create_todo(
+    client: TestClient, title: str, headers: Dict[str, str] = None, **kwargs: Any
+) -> Dict[str, Any]:
     payload: Dict[str, Any] = {"title": title}
     payload.update(kwargs)
     response = client.post("/api/todos", json=payload, headers=headers)
@@ -476,7 +517,9 @@ def test_todo_invalid_status_rejected(client: TestClient, auth: Dict[str, str]) 
     assert response.status_code == 400
 
 
-def test_todo_update_invalid_status_rejected(client: TestClient, auth: Dict[str, str]) -> None:
+def test_todo_update_invalid_status_rejected(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
     todo = create_todo(client, "Will try bad update", headers=auth)
     response = client.patch(
         f"/api/todos/{todo['id']}",
@@ -502,11 +545,15 @@ def test_todo_linked_to_task(client: TestClient, auth: Dict[str, str]) -> None:
     assert todos[0]["id"] == todo["id"]
 
 
-def test_todo_unlinked_when_task_deleted(client: TestClient, auth: Dict[str, str]) -> None:
+def test_todo_unlinked_when_task_deleted(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
     project = create_project(client, "Unlink Project", headers=auth)
     task = create_task(client, project["id"], "Unlink Task", headers=auth)
 
-    todo = create_todo(client, "Will be unlinked", headers=auth, linkedTaskId=task["id"])
+    todo = create_todo(
+        client, "Will be unlinked", headers=auth, linkedTaskId=task["id"]
+    )
     assert todo["linkedTaskId"] == task["id"]
 
     response = client.delete(f"/api/tasks/{task['id']}", headers=auth)
@@ -533,7 +580,9 @@ def test_todo_not_found(client: TestClient, auth: Dict[str, str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_todo_comments_included_in_todo(client: TestClient, auth: Dict[str, str]) -> None:
+def test_todo_comments_included_in_todo(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
     todo = create_todo(client, "Has comments field", headers=auth)
     assert "comments" in todo
     assert todo["comments"] == []
@@ -543,7 +592,9 @@ def test_todo_comment_crud(client: TestClient, auth: Dict[str, str]) -> None:
     todo = create_todo(client, "Commentable", headers=auth)
 
     resp = client.post(
-        f"/api/todos/{todo['id']}/comments", json={"content": "First note"}, headers=auth
+        f"/api/todos/{todo['id']}/comments",
+        json={"content": "First note"},
+        headers=auth,
     )
     assert resp.status_code == 201
     comment = resp.json()
@@ -557,7 +608,9 @@ def test_todo_comment_crud(client: TestClient, auth: Dict[str, str]) -> None:
     assert found["comments"][0]["id"] == comment["id"]
 
     resp = client.patch(
-        f"/api/todo-comments/{comment['id']}", json={"content": "Updated note"}, headers=auth
+        f"/api/todo-comments/{comment['id']}",
+        json={"content": "Updated note"},
+        headers=auth,
     )
     assert resp.status_code == 200
     updated = resp.json()
@@ -572,22 +625,32 @@ def test_todo_comment_crud(client: TestClient, auth: Dict[str, str]) -> None:
     assert len(found["comments"]) == 0
 
 
-def test_todo_comment_on_nonexistent_todo(client: TestClient, auth: Dict[str, str]) -> None:
-    resp = client.post("/api/todos/nonexistent/comments", json={"content": "Nope"}, headers=auth)
+def test_todo_comment_on_nonexistent_todo(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
+    resp = client.post(
+        "/api/todos/nonexistent/comments", json={"content": "Nope"}, headers=auth
+    )
     assert resp.status_code == 404
 
 
 def test_todo_comment_not_found(client: TestClient, auth: Dict[str, str]) -> None:
-    resp = client.patch("/api/todo-comments/nonexistent", json={"content": "X"}, headers=auth)
+    resp = client.patch(
+        "/api/todo-comments/nonexistent", json={"content": "X"}, headers=auth
+    )
     assert resp.status_code == 404
 
     resp = client.delete("/api/todo-comments/nonexistent", headers=auth)
     assert resp.status_code == 404
 
 
-def test_todo_comments_cascade_on_delete(client: TestClient, auth: Dict[str, str]) -> None:
+def test_todo_comments_cascade_on_delete(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
     todo = create_todo(client, "Will be deleted", headers=auth)
-    client.post(f"/api/todos/{todo['id']}/comments", json={"content": "Orphan?"}, headers=auth)
+    client.post(
+        f"/api/todos/{todo['id']}/comments", json={"content": "Orphan?"}, headers=auth
+    )
 
     resp = client.delete(f"/api/todos/{todo['id']}", headers=auth)
     assert resp.status_code == 204
@@ -622,7 +685,9 @@ def test_bootstrap_creates_admin(client: TestClient) -> None:
     assert resp.json()["initialized"] is True
 
 
-def test_bootstrap_fails_when_users_exist(client: TestClient, auth: Dict[str, str]) -> None:
+def test_bootstrap_fails_when_users_exist(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
     resp = client.post(
         "/api/auth/bootstrap",
         json={"username": "another", "password": "password123"},

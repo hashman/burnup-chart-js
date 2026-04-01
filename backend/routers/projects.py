@@ -1,7 +1,7 @@
 """Project endpoints."""
 
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status

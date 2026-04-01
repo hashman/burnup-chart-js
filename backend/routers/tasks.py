@@ -1,12 +1,10 @@
 """Task endpoints."""
 
 import sqlite3
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
-
-from auth import get_current_user
 from db import get_connection
 from models import LogPayload, TaskCreate, TaskOut, TaskPayload, TaskUpdate
 from permissions import require_member_or_admin

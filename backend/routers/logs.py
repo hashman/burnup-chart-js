@@ -6,7 +6,6 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from auth import get_current_user
 from db import get_connection
 from models import LogCreate, LogOut, LogPayload
 from permissions import require_member_or_admin

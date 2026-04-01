@@ -34,7 +34,6 @@ const addDays = (dateStr, days) => {
   return d.toISOString().split('T')[0];
 };
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 const buildTaskPayload = (task) => ({
   name: task.name || "",
@@ -339,7 +338,7 @@ function MergedProjectModal({ projects, initialSelectedIds, onConfirm, onCancel 
 }
 
 export default function BurnupChartApp() {
-  const { user, isLoading: authLoading, initialized } = useAuth();
+  const { user, isLoading: authLoading, initialized: _initialized } = useAuth();
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   if (authLoading) {
@@ -362,9 +361,9 @@ export default function BurnupChartApp() {
   );
 }
 
-function BurnupChartInner({ showAdminPanel, setShowAdminPanel }) {
+function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }) {
   const { user } = useAuth();
-  const isViewer = user?.role === 'viewer';
+  const _isViewer = user?.role === 'viewer';
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
   const [activeProjectId, setActiveProjectId] = useState(() => {
     const hash = window.location.hash.slice(1);

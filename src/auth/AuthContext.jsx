@@ -11,6 +11,7 @@ export function AuthProvider({ children }) {
   const [initialized, setInitialized] = useState(null); // null = unknown, true/false
   const accessTokenRef = useRef(null);
   const refreshTimerRef = useRef(null);
+  const scheduleRefreshRef = useRef(null);
 
   const clearAuth = useCallback(() => {
     accessTokenRef.current = null;
@@ -37,12 +38,17 @@ export function AuthProvider({ children }) {
         accessTokenRef.current = data.access_token;
         localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
         setUser(data.user);
-        scheduleRefresh(28 * 60 * 1000); // assume ~30min token
+        scheduleRefreshRef.current(28 * 60 * 1000); // assume ~30min token
       } catch {
         clearAuth();
       }
     }, delay);
   }, [clearAuth]);
+
+  // Keep ref in sync so the recursive setTimeout call always uses the latest version
+  useEffect(() => {
+    scheduleRefreshRef.current = scheduleRefresh;
+  }, [scheduleRefresh]);
 
   const handleTokenResponse = useCallback((data) => {
     accessTokenRef.current = data.access_token;

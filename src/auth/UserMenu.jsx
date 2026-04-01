@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { User, LogOut, Shield, Users } from 'lucide-react';
+import { User, LogOut, Users } from 'lucide-react';
 import { useAuth } from './AuthContext';
 
 const ROLE_LABELS = {

@@ -12,7 +12,7 @@ export default function TodoBoard({
 }) {
   const [editingTodoId, setEditingTodoId] = useState(initialEditTodoId || null);
   const [showFormModal, setShowFormModal] = useState(!!initialEditTodoId);
-  const [draggingId, setDraggingId] = useState(null);
+  const [_draggingId, setDraggingId] = useState(null);
   const [dragOverColumn, setDragOverColumn] = useState(null);
   const [hideDone, setHideDone] = useState(false);
 
@@ -46,7 +46,7 @@ export default function TodoBoard({
     if (initialEditTodoId && onClearInitialEditTodoId) {
       onClearInitialEditTodoId();
     }
-  }, [initialEditTodoId]);
+  }, [initialEditTodoId, onClearInitialEditTodoId]);
 
   const allTags = useMemo(() => {
     const tagSet = new Set();
