@@ -317,6 +317,20 @@ def startup() -> None:
         sqlite3.Error: If database initialization fails.
     """
     init_db()
+    if os.environ.get("BURNUP_BACKUP_ENABLED", "").lower() in ("1", "true", "yes"):
+        from backup import run_backup, start_backup_scheduler
+
+        run_backup()
+        start_backup_scheduler()
+
+
+@app.on_event("shutdown")
+def shutdown() -> None:
+    """Shut down background services."""
+    if os.environ.get("BURNUP_BACKUP_ENABLED", "").lower() in ("1", "true", "yes"):
+        from backup import shutdown_backup_scheduler
+
+        shutdown_backup_scheduler()
 
 
 def utc_now() -> str:
