@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, ReferenceLine, ReferenceDot, Label } from 'recharts';
-import { Upload, Download, Plus, Trash2, Calendar, User, Briefcase, AlertTriangle, CheckCircle2, Filter, Lock, ChevronLeft, Eye, EyeOff, Settings, Percent, MessageSquare, X, Send, Tag, Maximize2, Minimize2, BarChart2, TrendingUp, Clock, ListTodo } from 'lucide-react';
+import { Upload, Download, Plus, Trash2, Calendar, User, AlertTriangle, CheckCircle2, Filter, Lock, ChevronLeft, Eye, EyeOff, Settings, Percent, MessageSquare, X, Send, Tag, Maximize2, Minimize2, BarChart2, TrendingUp, Clock, ListTodo } from 'lucide-react';
 import Holidays from 'date-holidays';
 import TodoBoard from './components/TodoBoard';
 import TodoSection from './components/TodoSection';
@@ -2208,7 +2208,7 @@ function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-2">
-              <Briefcase className="text-indigo-600" />
+              <img src="/logo.svg" alt="Burnup Chart" className="w-8 h-8" />
               <h1 className="text-xl font-bold text-gray-900">專案管理 Burnup</h1>
             </div>
             <div className="flex items-center space-x-2">

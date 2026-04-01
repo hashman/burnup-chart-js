@@ -46,6 +46,9 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm">
+        <div className="flex justify-center mb-4">
+          <img src="/logo.svg" alt="Burnup Chart" className="w-20 h-20" />
+        </div>
         <h1 className="text-2xl font-bold text-center text-gray-800 mb-2">
           燃盡圖
         </h1>
