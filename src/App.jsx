@@ -786,8 +786,8 @@ export default function BurnupChartApp() {
     normalizedTasks.forEach(t => {
       if (t.showLabel) {
         // Decide which date to attach the label to.
-        // Priority: Actual End > Actual Start > Expected Start > Added Date > Expected End
-        const targetDate = t.actualEnd || t.actualStart || t.expectedStart || t.addedDate || t.expectedEnd;
+        // Priority: Actual End > Expected End > Actual Start > Expected Start > Added Date
+        const targetDate = t.actualEnd || t.expectedEnd || t.actualStart || t.expectedStart || t.addedDate;
         const normalizedTargetDate = normalizeDateString(targetDate);
         if (!normalizedTargetDate) return;
 
@@ -804,7 +804,8 @@ export default function BurnupChartApp() {
           ...t,
           x: point.date,
           y: yValue,
-          isActual: !!t.actualEnd
+          isActual: !!t.actualEnd,
+          isLast: point === data[data.length - 1]
         });
       }
     });
@@ -1654,7 +1655,7 @@ export default function BurnupChartApp() {
           >
             <Label
               value={anno.name}
-              position="top"
+              position={anno.isLast ? "left" : "top"}
               offset={10}
               style={{ fontSize: '10px', fill: '#4b5563', fontWeight: 'bold', pointerEvents: 'none' }}
             />
