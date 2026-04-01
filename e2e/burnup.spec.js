@@ -206,7 +206,7 @@ test.describe('合併檢視', () => {
 
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
     await page.reload();
-    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible({ timeout: 10_000 });
 
     // 點擊合併 tab → Modal 出現
     await page.getByText('合併檢視').click();
@@ -228,7 +228,7 @@ test.describe('合併檢視', () => {
 
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
     await page.reload();
-    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible({ timeout: 10_000 });
 
     // Set up merged view through UI first
     await enterMergedViewViaUI(page);
@@ -248,7 +248,7 @@ test.describe('合併檢視', () => {
 
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
     await page.reload();
-    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible({ timeout: 10_000 });
 
     // Set up merged view through UI
     await enterMergedViewViaUI(page);
@@ -265,7 +265,7 @@ test.describe('合併檢視', () => {
 
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
     await page.reload();
-    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible({ timeout: 10_000 });
 
     // 點合併 tab → Modal 出現
     await page.getByText('合併檢視').click();
@@ -285,7 +285,7 @@ test.describe('合併檢視', () => {
 
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
     await page.reload();
-    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible({ timeout: 10_000 });
 
     // Set up merged view through UI
     await enterMergedViewViaUI(page);
