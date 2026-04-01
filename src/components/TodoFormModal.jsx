@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { X, Trash2, Send, Pencil, Check } from 'lucide-react';
+import { X, Trash2, Send, Pencil } from 'lucide-react';
 
-export default function TodoFormModal({ todo, statuses, allTasks, projects, allTags, allAssignees, onSave, onDelete, onClose, onCreateComment, onUpdateComment, onDeleteComment }) {
+export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, projects, allTags, allAssignees, onSave, onDelete, onClose, onCreateComment, onUpdateComment, onDeleteComment }) {
   const isEdit = !!todo;
   const startStatus = statuses.find(s => s.isDefaultStart);
 
