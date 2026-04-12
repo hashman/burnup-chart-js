@@ -159,7 +159,7 @@ test.describe('Burnup Chart App 完整流程測試', () => {
     });
 
     // Reload to pick up the seeded data (refresh token in localStorage enables auto-login)
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.goto('/');
     await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible({ timeout: 15_000 });
 
     // Switch to the seeded project tab
@@ -205,7 +205,7 @@ test.describe('合併檢視', () => {
     await createProjectViaAPI('Merge Seed A');
 
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.goto('/');
     await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible({ timeout: 15_000 });
 
     // 點擊合併 tab → Modal 出現
@@ -227,7 +227,7 @@ test.describe('合併檢視', () => {
     await createProjectViaAPI('Merge Seed B');
 
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.goto('/');
     await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible({ timeout: 15_000 });
 
     // Set up merged view through UI first
@@ -247,7 +247,7 @@ test.describe('合併檢視', () => {
     await createProjectViaAPI('Merge Seed C');
 
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.goto('/');
     await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible({ timeout: 15_000 });
 
     // Set up merged view through UI
@@ -264,7 +264,7 @@ test.describe('合併檢視', () => {
     await createProjectViaAPI('Cancel Test');
 
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.goto('/');
     await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible({ timeout: 15_000 });
 
     // 點合併 tab → Modal 出現
@@ -284,7 +284,7 @@ test.describe('合併檢視', () => {
     await createProjectViaAPI('Merge Seed D');
 
     await page.evaluate(() => localStorage.removeItem('burnup_merged_project_ids'));
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.goto('/');
     await expect(page.getByRole('heading', { name: '專案管理 Burnup' })).toBeVisible({ timeout: 15_000 });
 
     // Set up merged view through UI
