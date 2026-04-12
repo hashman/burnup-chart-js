@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from db import get_connection
 from models import LogPayload, TaskCreate, TaskOut, TaskPayload, TaskUpdate
 from permissions import require_member_or_admin
+from audit import record_audit
 
 router = APIRouter(prefix="/api", tags=["tasks"])
 
@@ -62,7 +63,7 @@ def utc_now() -> str:
 def create_task(
     project_id: str,
     payload: TaskCreate,
-    _current_user: dict = Depends(require_member_or_admin),
+    current_user: dict = Depends(require_member_or_admin),
 ) -> TaskPayload:
     task_id = payload.id or f"task_{uuid4().hex}"
     now = utc_now()
@@ -104,6 +105,19 @@ def create_task(
                 now,
             ),
         )
+        record_audit(
+            conn,
+            user=current_user,
+            action="create",
+            entity_type="task",
+            entity_id=task_id,
+            entity_label=payload.name,
+            changes={
+                "name": {"new": payload.name},
+                "points": {"new": payload.points},
+                "projectId": {"new": project_id},
+            },
+        )
         conn.commit()
         task = fetch_task(conn, task_id)
 
@@ -114,7 +128,7 @@ def create_task(
 def update_task(
     task_id: str,
     payload: TaskUpdate,
-    _current_user: dict = Depends(require_member_or_admin),
+    current_user: dict = Depends(require_member_or_admin),
 ) -> TaskPayload:
     fields: List[str] = []
     values: List[Any] = []
@@ -152,7 +166,7 @@ def update_task(
 
     with get_connection() as conn:
         existing = conn.execute(
-            "SELECT 1 FROM tasks WHERE id = ?", (task_id,)
+            "SELECT * FROM tasks WHERE id = ?", (task_id,)
         ).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Task not found")
@@ -160,6 +174,32 @@ def update_task(
         if fields:
             values.append(task_id)
             conn.execute(f"UPDATE tasks SET {', '.join(fields)} WHERE id = ?", values)
+            changes = {}
+            field_map = [
+                ("name", payload.name, existing["name"]),
+                ("points", payload.points, existing["points"]),
+                ("people", payload.people, existing["people"]),
+                ("addedDate", payload.addedDate, existing["added_date"]),
+                ("expectedStart", payload.expectedStart, existing["expected_start"]),
+                ("expectedEnd", payload.expectedEnd, existing["expected_end"]),
+                ("actualStart", payload.actualStart, existing["actual_start"]),
+                ("actualEnd", payload.actualEnd, existing["actual_end"]),
+                ("showLabel", payload.showLabel, bool(existing["show_label"])),
+                ("progress", payload.progress, existing["progress"]),
+            ]
+            for fname, new_val, old_val in field_map:
+                if new_val is not None and new_val != old_val:
+                    changes[fname] = {"old": old_val, "new": new_val}
+            if changes:
+                record_audit(
+                    conn,
+                    user=current_user,
+                    action="update",
+                    entity_type="task",
+                    entity_id=task_id,
+                    entity_label=payload.name or existing["name"],
+                    changes=changes,
+                )
             conn.commit()
 
         task = fetch_task(conn, task_id)
@@ -170,11 +210,23 @@ def update_task(
 @router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_task(
     task_id: str,
-    _current_user: dict = Depends(require_member_or_admin),
+    current_user: dict = Depends(require_member_or_admin),
 ) -> None:
     with get_connection() as conn:
-        result = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        existing = conn.execute(
+            "SELECT name FROM tasks WHERE id = ?", (task_id,)
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Task not found")
+        conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+        record_audit(
+            conn,
+            user=current_user,
+            action="delete",
+            entity_type="task",
+            entity_id=task_id,
+            entity_label=existing["name"],
+            changes={"name": {"old": existing["name"]}},
+        )
         conn.commit()
-    if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Task not found")
     return None

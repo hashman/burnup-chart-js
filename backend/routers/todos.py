@@ -18,6 +18,7 @@ from models import (
     TodoOut,
     TodoUpdate,
 )
+from audit import record_audit
 from permissions import require_member_or_admin
 
 router = APIRouter(prefix="/api", tags=["todos"])
@@ -92,7 +93,7 @@ def list_todos(
 @router.post("/todos", response_model=TodoOut, status_code=status.HTTP_201_CREATED)
 def create_todo(
     payload: TodoCreate,
-    _current_user: dict = Depends(require_member_or_admin),
+    current_user: dict = Depends(require_member_or_admin),
 ) -> Dict[str, Any]:
     todo_id = payload.id or f"todo_{uuid4().hex}"
     now = utc_now()
@@ -136,6 +137,15 @@ def create_todo(
                 0,
             ),
         )
+        record_audit(
+            conn,
+            user=current_user,
+            action="create",
+            entity_type="todo",
+            entity_id=todo_id,
+            entity_label=payload.title,
+            changes={"title": {"new": payload.title}, "priority": {"new": payload.priority}},
+        )
         conn.commit()
         row = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
     return row_to_todo(row, [])
@@ -145,11 +155,11 @@ def create_todo(
 def update_todo(
     todo_id: str,
     payload: TodoUpdate,
-    _current_user: dict = Depends(require_member_or_admin),
+    current_user: dict = Depends(require_member_or_admin),
 ) -> Dict[str, Any]:
     with get_connection() as conn:
         existing = conn.execute(
-            "SELECT 1 FROM todos WHERE id = ?", (todo_id,)
+            "SELECT * FROM todos WHERE id = ?", (todo_id,)
         ).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Todo not found")
@@ -193,6 +203,34 @@ def update_todo(
         if fields:
             values.append(todo_id)
             conn.execute(f"UPDATE todos SET {', '.join(fields)} WHERE id = ?", values)
+            changes = {}
+            field_map = [
+                ("title", payload.title, existing["title"]),
+                ("status", payload.status, existing["status"]),
+                ("priority", payload.priority, existing["priority"]),
+                ("dueDate", payload.dueDate, existing["due_date"]),
+                ("assignee", payload.assignee, existing["assignee"]),
+                ("note", payload.note, existing["note"]),
+                ("linkedTaskId", payload.linkedTaskId, existing["linked_task_id"]),
+                ("sortOrder", payload.sortOrder, existing["sort_order"]),
+            ]
+            for fname, new_val, old_val in field_map:
+                if new_val is not None and new_val != old_val:
+                    changes[fname] = {"old": old_val, "new": new_val}
+            if payload.tags is not None:
+                old_tags = _json.loads(existing["tags"]) if existing["tags"] else []
+                if payload.tags != old_tags:
+                    changes["tags"] = {"old": old_tags, "new": payload.tags}
+            if changes:
+                record_audit(
+                    conn,
+                    user=current_user,
+                    action="update",
+                    entity_type="todo",
+                    entity_id=todo_id,
+                    entity_label=payload.title or existing["title"],
+                    changes=changes,
+                )
             conn.commit()
 
         row = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
@@ -206,13 +244,25 @@ def update_todo(
 @router.delete("/todos/{todo_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_todo(
     todo_id: str,
-    _current_user: dict = Depends(require_member_or_admin),
+    current_user: dict = Depends(require_member_or_admin),
 ) -> None:
     with get_connection() as conn:
-        result = conn.execute("DELETE FROM todos WHERE id = ?", (todo_id,))
+        existing = conn.execute(
+            "SELECT title FROM todos WHERE id = ?", (todo_id,)
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Todo not found")
+        conn.execute("DELETE FROM todos WHERE id = ?", (todo_id,))
+        record_audit(
+            conn,
+            user=current_user,
+            action="delete",
+            entity_type="todo",
+            entity_id=todo_id,
+            entity_label=existing["title"],
+            changes={"title": {"old": existing["title"]}},
+        )
         conn.commit()
-    if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Todo not found")
     return None
 
 
@@ -244,7 +294,7 @@ def list_task_todos(
 def create_todo_comment(
     todo_id: str,
     payload: TodoCommentCreate,
-    _current_user: dict = Depends(require_member_or_admin),
+    current_user: dict = Depends(require_member_or_admin),
 ) -> Dict[str, Any]:
     comment_id = f"tc_{uuid4().hex}"
     now = utc_now()
@@ -258,6 +308,15 @@ def create_todo_comment(
             "INSERT INTO todo_comments (id, todo_id, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
             (comment_id, todo_id, payload.content, now, now),
         )
+        record_audit(
+            conn,
+            user=current_user,
+            action="create",
+            entity_type="todo_comment",
+            entity_id=comment_id,
+            entity_label=payload.content[:50] if payload.content else "",
+            changes={"content": {"new": payload.content}, "todoId": {"new": todo_id}},
+        )
         conn.commit()
         row = conn.execute(
             "SELECT * FROM todo_comments WHERE id = ?", (comment_id,)
@@ -269,12 +328,12 @@ def create_todo_comment(
 def update_todo_comment(
     comment_id: str,
     payload: TodoCommentUpdate,
-    _current_user: dict = Depends(require_member_or_admin),
+    current_user: dict = Depends(require_member_or_admin),
 ) -> Dict[str, Any]:
     now = utc_now()
     with get_connection() as conn:
         existing = conn.execute(
-            "SELECT 1 FROM todo_comments WHERE id = ?", (comment_id,)
+            "SELECT * FROM todo_comments WHERE id = ?", (comment_id,)
         ).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Comment not found")
@@ -282,6 +341,19 @@ def update_todo_comment(
             "UPDATE todo_comments SET content = ?, updated_at = ? WHERE id = ?",
             (payload.content, now, comment_id),
         )
+        changes = {}
+        if payload.content != existing["content"]:
+            changes["content"] = {"old": existing["content"], "new": payload.content}
+        if changes:
+            record_audit(
+                conn,
+                user=current_user,
+                action="update",
+                entity_type="todo_comment",
+                entity_id=comment_id,
+                entity_label=payload.content[:50],
+                changes=changes,
+            )
         conn.commit()
         row = conn.execute(
             "SELECT * FROM todo_comments WHERE id = ?", (comment_id,)
@@ -292,10 +364,23 @@ def update_todo_comment(
 @router.delete("/todo-comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_todo_comment(
     comment_id: str,
-    _current_user: dict = Depends(require_member_or_admin),
+    current_user: dict = Depends(require_member_or_admin),
 ) -> None:
     with get_connection() as conn:
-        result = conn.execute("DELETE FROM todo_comments WHERE id = ?", (comment_id,))
+        existing = conn.execute(
+            "SELECT * FROM todo_comments WHERE id = ?", (comment_id,)
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Comment not found")
+        conn.execute("DELETE FROM todo_comments WHERE id = ?", (comment_id,))
+        record_audit(
+            conn,
+            user=current_user,
+            action="delete",
+            entity_type="todo_comment",
+            entity_id=comment_id,
+            entity_label=existing["content"][:50] if existing["content"] else "",
+            changes={"content": {"old": existing["content"]}, "todoId": {"old": existing["todo_id"]}},
+        )
         conn.commit()
-    if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Comment not found")
+    return None

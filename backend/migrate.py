@@ -175,6 +175,38 @@ def add_logs_author_id(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE logs ADD COLUMN author_id TEXT")
 
 
+# ── Audit log migration ──────────────────────────────────────────────
+
+
+@migration("create audit_logs table")
+def create_audit_logs_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            user_display TEXT NOT NULL,
+            action TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            entity_label TEXT,
+            changes TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, entity_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id)"
+    )
+
+
 # ── Runner ────────────────────────────────────────────────────────────
 
 

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { User, LogOut, Users } from 'lucide-react';
+import { User, LogOut, Users, ClipboardList } from 'lucide-react';
 import { useAuth } from './AuthContext';
 
 const ROLE_LABELS = {
@@ -14,7 +14,7 @@ const ROLE_COLORS = {
   viewer: 'bg-gray-100 text-gray-600',
 };
 
-export default function UserMenu({ onAdminPanel }) {
+export default function UserMenu({ onAdminPanel, onAuditLog }) {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
@@ -51,6 +51,15 @@ export default function UserMenu({ onAdminPanel }) {
             >
               <Users size={14} />
               使用者管理
+            </button>
+          )}
+          {user.role === 'admin' && onAuditLog && (
+            <button
+              onClick={() => { setOpen(false); onAuditLog(); }}
+              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+            >
+              <ClipboardList size={14} />
+              稽核記錄
             </button>
           )}
           <button

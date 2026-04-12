@@ -15,6 +15,7 @@ from auth import (
     verify_password,
     verify_refresh_token,
 )
+from audit import record_audit
 from db import get_connection
 from models import (
     RefreshRequest,
@@ -153,6 +154,22 @@ def update_me(
         values.append(current_user["id"])
         with get_connection() as conn:
             conn.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
+            changes = {}
+            if payload.display_name is not None:
+                changes["displayName"] = {"old": current_user["display_name"], "new": payload.display_name}
+            if payload.email is not None:
+                changes["email"] = {"old": current_user["email"], "new": payload.email}
+            if payload.password is not None:
+                changes["password"] = {"old": "[redacted]", "new": "[redacted]"}
+            record_audit(
+                conn,
+                user=current_user,
+                action="update",
+                entity_type="user",
+                entity_id=current_user["id"],
+                entity_label=current_user["username"],
+                changes=changes,
+            )
             conn.commit()
             row = conn.execute(
                 "SELECT * FROM users WHERE id = ?", (current_user["id"],)
@@ -187,7 +204,7 @@ def list_users(
 @router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def create_user(
     payload: UserCreate,
-    _current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_admin),
 ) -> Dict[str, Any]:
     user_id = f"user_{uuid4().hex}"
     now = datetime.now(timezone.utc).isoformat()
@@ -216,6 +233,19 @@ def create_user(
                 now,
             ),
         )
+        record_audit(
+            conn,
+            user=current_user,
+            action="create",
+            entity_type="user",
+            entity_id=user_id,
+            entity_label=payload.username,
+            changes={
+                "username": {"new": payload.username},
+                "displayName": {"new": payload.display_name},
+                "role": {"new": payload.role},
+            },
+        )
         conn.commit()
         row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
 
@@ -226,7 +256,7 @@ def create_user(
 def update_user(
     user_id: str,
     payload: UserAdminUpdate,
-    _current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_admin),
 ) -> Dict[str, Any]:
     fields: List[str] = []
     values: List[Any] = []
@@ -243,7 +273,7 @@ def update_user(
 
     with get_connection() as conn:
         existing = conn.execute(
-            "SELECT 1 FROM users WHERE id = ?", (user_id,)
+            "SELECT * FROM users WHERE id = ?", (user_id,)
         ).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="使用者不存在")
@@ -253,6 +283,21 @@ def update_user(
             values.append(now)
             values.append(user_id)
             conn.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
+            changes = {}
+            if payload.role is not None and payload.role != existing["role"]:
+                changes["role"] = {"old": existing["role"], "new": payload.role}
+            if payload.is_active is not None and payload.is_active != bool(existing["is_active"]):
+                changes["isActive"] = {"old": bool(existing["is_active"]), "new": payload.is_active}
+            if changes:
+                record_audit(
+                    conn,
+                    user=current_user,
+                    action="update",
+                    entity_type="user",
+                    entity_id=user_id,
+                    entity_label=existing["username"],
+                    changes=changes,
+                )
             conn.commit()
 
         row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()

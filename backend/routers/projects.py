@@ -16,6 +16,7 @@ from models import (
     ProjectUpdate,
     TaskPayload,
 )
+from audit import record_audit
 from permissions import require_member_or_admin
 
 router = APIRouter(prefix="/api", tags=["projects"])
@@ -144,6 +145,15 @@ def create_project(
             "INSERT INTO projects (id, name, created_at, created_by) VALUES (?, ?, ?, ?)",
             (project_id, payload.name, now, current_user["id"]),
         )
+        record_audit(
+            conn,
+            user=current_user,
+            action="create",
+            entity_type="project",
+            entity_id=project_id,
+            entity_label=payload.name,
+            changes={"name": {"new": payload.name}},
+        )
         conn.commit()
         project = fetch_project(conn, project_id)
 
@@ -154,11 +164,11 @@ def create_project(
 def update_project(
     project_id: str,
     payload: ProjectUpdate,
-    _current_user: dict = Depends(require_member_or_admin),
+    current_user: dict = Depends(require_member_or_admin),
 ) -> ProjectPayload:
     with get_connection() as conn:
         existing = conn.execute(
-            "SELECT 1 FROM projects WHERE id = ?", (project_id,)
+            "SELECT name FROM projects WHERE id = ?", (project_id,)
         ).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Project not found")
@@ -167,8 +177,22 @@ def update_project(
             conn.execute(
                 "UPDATE projects SET name = ? WHERE id = ?", (payload.name, project_id)
             )
-            conn.commit()
 
+        changes = {}
+        if payload.name is not None and payload.name != existing["name"]:
+            changes["name"] = {"old": existing["name"], "new": payload.name}
+        if changes:
+            record_audit(
+                conn,
+                user=current_user,
+                action="update",
+                entity_type="project",
+                entity_id=project_id,
+                entity_label=payload.name or existing["name"],
+                changes=changes,
+            )
+
+        conn.commit()
         project = fetch_project(conn, project_id)
 
     return project
@@ -177,11 +201,23 @@ def update_project(
 @router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(
     project_id: str,
-    _current_user: dict = Depends(require_member_or_admin),
+    current_user: dict = Depends(require_member_or_admin),
 ) -> None:
     with get_connection() as conn:
-        result = conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+        existing = conn.execute(
+            "SELECT name FROM projects WHERE id = ?", (project_id,)
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Project not found")
+        conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+        record_audit(
+            conn,
+            user=current_user,
+            action="delete",
+            entity_type="project",
+            entity_id=project_id,
+            entity_label=existing["name"],
+            changes={"name": {"old": existing["name"]}},
+        )
         conn.commit()
-    if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Project not found")
     return None

@@ -9,6 +9,7 @@ import { useAuth } from './auth/AuthContext';
 import LoginPage from './auth/LoginPage';
 import UserMenu from './auth/UserMenu';
 import AdminPanel from './auth/AdminPanel';
+import AuditLogPanel from './audit/AuditLogPanel';
 
 // --- Utility Functions ---
 
@@ -340,6 +341,7 @@ function MergedProjectModal({ projects, initialSelectedIds, onConfirm, onCancel 
 export default function BurnupChartApp() {
   const { user, isLoading: authLoading, initialized: _initialized } = useAuth();
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showAuditLog, setShowAuditLog] = useState(false);
 
   if (authLoading) {
     return (
@@ -355,13 +357,14 @@ export default function BurnupChartApp() {
 
   return (
     <>
-      <BurnupChartInner showAdminPanel={showAdminPanel} setShowAdminPanel={setShowAdminPanel} />
+      <BurnupChartInner showAdminPanel={showAdminPanel} setShowAdminPanel={setShowAdminPanel} setShowAuditLog={setShowAuditLog} />
       {showAdminPanel && <AdminPanel onClose={() => setShowAdminPanel(false)} />}
+      {showAuditLog && <AuditLogPanel onClose={() => setShowAuditLog(false)} />}
     </>
   );
 }
 
-function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }) {
+function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel, setShowAuditLog }) {
   const { user } = useAuth();
   const _isViewer = user?.role === 'viewer';
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
@@ -2222,7 +2225,7 @@ function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }
                 <Download size={20} />
               </button>
               <div className="border-l border-gray-200 pl-2 ml-1">
-                <UserMenu onAdminPanel={() => setShowAdminPanel(true)} />
+                <UserMenu onAdminPanel={() => setShowAdminPanel(true)} onAuditLog={() => setShowAuditLog(true)} />
               </div>
             </div>
           </div>

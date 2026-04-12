@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from db import get_connection
 from models import LogCreate, LogOut, LogPayload
+from audit import record_audit
 from permissions import require_member_or_admin
 
 router = APIRouter(prefix="/api", tags=["logs"])
@@ -29,7 +30,7 @@ def utc_now() -> str:
 def create_log(
     task_id: str,
     payload: LogCreate,
-    _current_user: dict = Depends(require_member_or_admin),
+    current_user: dict = Depends(require_member_or_admin),
 ) -> LogPayload:
     log_id = payload.id or f"log_{uuid4().hex}"
     now = utc_now()
@@ -50,6 +51,19 @@ def create_log(
             "VALUES (?, ?, ?, ?, ?)",
             (log_id, task_id, payload.date, payload.content, now),
         )
+        record_audit(
+            conn,
+            user=current_user,
+            action="create",
+            entity_type="log",
+            entity_id=log_id,
+            entity_label=payload.content[:50] if payload.content else "",
+            changes={
+                "date": {"new": payload.date},
+                "content": {"new": payload.content},
+                "taskId": {"new": task_id},
+            },
+        )
         conn.commit()
 
         log_row = conn.execute("SELECT * FROM logs WHERE id = ?", (log_id,)).fetchone()
@@ -60,11 +74,26 @@ def create_log(
 @router.delete("/logs/{log_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_log(
     log_id: str,
-    _current_user: dict = Depends(require_member_or_admin),
+    current_user: dict = Depends(require_member_or_admin),
 ) -> None:
     with get_connection() as conn:
-        result = conn.execute("DELETE FROM logs WHERE id = ?", (log_id,))
+        existing = conn.execute(
+            "SELECT * FROM logs WHERE id = ?", (log_id,)
+        ).fetchone()
+        if not existing:
+            raise HTTPException(status_code=404, detail="Log not found")
+        conn.execute("DELETE FROM logs WHERE id = ?", (log_id,))
+        record_audit(
+            conn,
+            user=current_user,
+            action="delete",
+            entity_type="log",
+            entity_id=log_id,
+            entity_label=existing["content"][:50] if existing["content"] else "",
+            changes={
+                "date": {"old": existing["date"]},
+                "content": {"old": existing["content"]},
+            },
+        )
         conn.commit()
-    if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Log not found")
     return None
