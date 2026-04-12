@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, Query
 
 from db import get_connection
-from models import AuditLogOut, AuditLogPage
+from models import AuditLogPage
 from permissions import require_admin
 
 router = APIRouter(prefix="/api", tags=["audit"])

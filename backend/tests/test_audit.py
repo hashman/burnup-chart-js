@@ -287,6 +287,51 @@ def test_audit_log_filter_by_date_range(client: TestClient, auth: Dict[str, str]
     assert len(resp.json()["items"]) >= 1
 
 
+def test_audit_log_on_status_reorder(client: TestClient, auth: Dict[str, str]):
+    """Reordering statuses produces one audit row per status whose sortOrder actually changed."""
+    statuses = client.get("/api/statuses", headers=auth).json()
+    assert len(statuses) >= 2
+
+    # Swap the first two statuses' sort order; leave the rest untouched.
+    s0, s1 = statuses[0], statuses[1]
+    reordered = [
+        {"id": s0["id"], "sortOrder": s1["sortOrder"]},
+        {"id": s1["id"], "sortOrder": s0["sortOrder"]},
+    ] + [{"id": s["id"], "sortOrder": s["sortOrder"]} for s in statuses[2:]]
+
+    resp = client.post("/api/statuses/reorder", json=reordered, headers=auth)
+    assert resp.status_code == 200
+
+    resp = client.get(
+        "/api/audit-logs",
+        params={"entityType": "status", "action": "update"},
+        headers=auth,
+    )
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+
+    # Exactly two rows: one per swapped status, each with its own entity_id.
+    reorder_rows = [i for i in items if i["entityId"] in {s0["id"], s1["id"]}]
+    assert len(reorder_rows) == 2
+    entity_ids = {row["entityId"] for row in reorder_rows}
+    assert entity_ids == {s0["id"], s1["id"]}
+
+    # Each row must record sortOrder old→new for its specific status.
+    by_id = {row["entityId"]: row for row in reorder_rows}
+    assert by_id[s0["id"]]["changes"]["sortOrder"] == {
+        "old": s0["sortOrder"],
+        "new": s1["sortOrder"],
+    }
+    assert by_id[s1["id"]]["changes"]["sortOrder"] == {
+        "old": s1["sortOrder"],
+        "new": s0["sortOrder"],
+    }
+
+    # Untouched statuses must not produce audit rows.
+    for s in statuses[2:]:
+        assert all(i["entityId"] != s["id"] for i in items)
+
+
 def test_audit_log_on_user_create(client: TestClient, auth: Dict[str, str]):
     """Creating a user via POST /api/auth/users produces an audit log entry."""
     resp = client.post(

@@ -155,21 +155,22 @@ def update_me(
         with get_connection() as conn:
             conn.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
             changes = {}
-            if payload.display_name is not None:
+            if payload.display_name is not None and payload.display_name != current_user["display_name"]:
                 changes["displayName"] = {"old": current_user["display_name"], "new": payload.display_name}
-            if payload.email is not None:
+            if payload.email is not None and payload.email != current_user["email"]:
                 changes["email"] = {"old": current_user["email"], "new": payload.email}
             if payload.password is not None:
                 changes["password"] = {"old": "[redacted]", "new": "[redacted]"}
-            record_audit(
-                conn,
-                user=current_user,
-                action="update",
-                entity_type="user",
-                entity_id=current_user["id"],
-                entity_label=current_user["username"],
-                changes=changes,
-            )
+            if changes:
+                record_audit(
+                    conn,
+                    user=current_user,
+                    action="update",
+                    entity_type="user",
+                    entity_id=current_user["id"],
+                    entity_label=current_user["username"],
+                    changes=changes,
+                )
             conn.commit()
             row = conn.execute(
                 "SELECT * FROM users WHERE id = ?", (current_user["id"],)
