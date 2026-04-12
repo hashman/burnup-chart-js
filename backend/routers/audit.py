@@ -1,16 +1,32 @@
 """Audit log query endpoints."""
 
 import json
+import re
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query
 
-from auth import get_current_user
 from db import get_connection
 from models import AuditLogOut, AuditLogPage
 from permissions import require_admin
 
 router = APIRouter(prefix="/api", tags=["audit"])
+
+_DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _normalize_start(value: str) -> str:
+    # Date-only → start of day in UTC so created_at ISO strings compare correctly.
+    if _DATE_ONLY_RE.match(value):
+        return f"{value}T00:00:00+00:00"
+    return value
+
+
+def _normalize_end(value: str) -> str:
+    # Date-only → end of day, inclusive of any microsecond precision in created_at.
+    if _DATE_ONLY_RE.match(value):
+        return f"{value}T23:59:59.999999+00:00"
+    return value
 
 
 def _row_to_audit(row) -> Dict[str, Any]:
@@ -58,10 +74,10 @@ def list_audit_logs(
         params.append(action)
     if startDate:
         conditions.append("created_at >= ?")
-        params.append(startDate)
+        params.append(_normalize_start(startDate))
     if endDate:
         conditions.append("created_at <= ?")
-        params.append(endDate)
+        params.append(_normalize_end(endDate))
 
     where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
 

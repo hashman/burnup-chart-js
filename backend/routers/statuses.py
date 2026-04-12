@@ -228,20 +228,29 @@ def reorder_statuses(
     current_user: dict = Depends(require_admin),
 ) -> List[Dict[str, Any]]:
     with get_connection() as conn:
+        existing_rows = conn.execute(
+            "SELECT id, name, sort_order FROM statuses"
+        ).fetchall()
+        existing_by_id = {row["id"]: row for row in existing_rows}
         for item in items:
             conn.execute(
                 "UPDATE statuses SET sort_order = ? WHERE id = ?",
                 (item.sortOrder, item.id),
             )
-        record_audit(
-            conn,
-            user=current_user,
-            action="update",
-            entity_type="status",
-            entity_id=",".join(item.id for item in items),
-            entity_label="reorder",
-            changes={item.id: {"new": item.sortOrder} for item in items},
-        )
+            prev = existing_by_id.get(item.id)
+            if prev is None or prev["sort_order"] == item.sortOrder:
+                continue
+            record_audit(
+                conn,
+                user=current_user,
+                action="update",
+                entity_type="status",
+                entity_id=item.id,
+                entity_label=prev["name"],
+                changes={
+                    "sortOrder": {"old": prev["sort_order"], "new": item.sortOrder}
+                },
+            )
         conn.commit()
         rows = conn.execute("SELECT * FROM statuses ORDER BY sort_order").fetchall()
     return [row_to_status(row) for row in rows]

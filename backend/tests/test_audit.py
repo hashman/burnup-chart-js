@@ -280,7 +280,7 @@ def test_audit_log_filter_by_date_range(client: TestClient, auth: Dict[str, str]
     today = date.today().isoformat()
     resp = client.get(
         "/api/audit-logs",
-        params={"startDate": today, "endDate": today + "T23:59:59"},
+        params={"startDate": today, "endDate": today},
         headers=auth,
     )
     assert resp.status_code == 200
