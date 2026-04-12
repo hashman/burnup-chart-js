@@ -77,9 +77,7 @@ def delete_log(
     current_user: dict = Depends(require_member_or_admin),
 ) -> None:
     with get_connection() as conn:
-        existing = conn.execute(
-            "SELECT * FROM logs WHERE id = ?", (log_id,)
-        ).fetchone()
+        existing = conn.execute("SELECT * FROM logs WHERE id = ?", (log_id,)).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Log not found")
         conn.execute("DELETE FROM logs WHERE id = ?", (log_id,))

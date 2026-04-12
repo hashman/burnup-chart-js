@@ -155,8 +155,14 @@ def update_me(
         with get_connection() as conn:
             conn.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
             changes = {}
-            if payload.display_name is not None and payload.display_name != current_user["display_name"]:
-                changes["displayName"] = {"old": current_user["display_name"], "new": payload.display_name}
+            if (
+                payload.display_name is not None
+                and payload.display_name != current_user["display_name"]
+            ):
+                changes["displayName"] = {
+                    "old": current_user["display_name"],
+                    "new": payload.display_name,
+                }
             if payload.email is not None and payload.email != current_user["email"]:
                 changes["email"] = {"old": current_user["email"], "new": payload.email}
             if payload.password is not None:
@@ -287,8 +293,13 @@ def update_user(
             changes = {}
             if payload.role is not None and payload.role != existing["role"]:
                 changes["role"] = {"old": existing["role"], "new": payload.role}
-            if payload.is_active is not None and payload.is_active != bool(existing["is_active"]):
-                changes["isActive"] = {"old": bool(existing["is_active"]), "new": payload.is_active}
+            if payload.is_active is not None and payload.is_active != bool(
+                existing["is_active"]
+            ):
+                changes["isActive"] = {
+                    "old": bool(existing["is_active"]),
+                    "new": payload.is_active,
+                }
             if changes:
                 record_audit(
                     conn,

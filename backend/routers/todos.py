@@ -144,7 +144,10 @@ def create_todo(
             entity_type="todo",
             entity_id=todo_id,
             entity_label=payload.title,
-            changes={"title": {"new": payload.title}, "priority": {"new": payload.priority}},
+            changes={
+                "title": {"new": payload.title},
+                "priority": {"new": payload.priority},
+            },
         )
         conn.commit()
         row = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
@@ -380,7 +383,10 @@ def delete_todo_comment(
             entity_type="todo_comment",
             entity_id=comment_id,
             entity_label=existing["content"][:50] if existing["content"] else "",
-            changes={"content": {"old": existing["content"]}, "todoId": {"old": existing["todo_id"]}},
+            changes={
+                "content": {"old": existing["content"]},
+                "todoId": {"old": existing["todo_id"]},
+            },
         )
         conn.commit()
     return None

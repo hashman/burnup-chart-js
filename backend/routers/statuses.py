@@ -136,12 +136,29 @@ def update_status(
             changes = {}
             if payload.name is not None and payload.name.strip() != existing["name"]:
                 changes["name"] = {"old": existing["name"], "new": payload.name.strip()}
-            if payload.sort_order is not None and payload.sort_order != existing["sort_order"]:
-                changes["sortOrder"] = {"old": existing["sort_order"], "new": payload.sort_order}
-            if payload.is_default_start is not None and payload.is_default_start != bool(existing["is_default_start"]):
-                changes["isDefaultStart"] = {"old": bool(existing["is_default_start"]), "new": payload.is_default_start}
-            if payload.is_default_end is not None and payload.is_default_end != bool(existing["is_default_end"]):
-                changes["isDefaultEnd"] = {"old": bool(existing["is_default_end"]), "new": payload.is_default_end}
+            if (
+                payload.sort_order is not None
+                and payload.sort_order != existing["sort_order"]
+            ):
+                changes["sortOrder"] = {
+                    "old": existing["sort_order"],
+                    "new": payload.sort_order,
+                }
+            if (
+                payload.is_default_start is not None
+                and payload.is_default_start != bool(existing["is_default_start"])
+            ):
+                changes["isDefaultStart"] = {
+                    "old": bool(existing["is_default_start"]),
+                    "new": payload.is_default_start,
+                }
+            if payload.is_default_end is not None and payload.is_default_end != bool(
+                existing["is_default_end"]
+            ):
+                changes["isDefaultEnd"] = {
+                    "old": bool(existing["is_default_end"]),
+                    "new": payload.is_default_end,
+                }
             if changes:
                 record_audit(
                     conn,
@@ -149,7 +166,9 @@ def update_status(
                     action="update",
                     entity_type="status",
                     entity_id=status_id,
-                    entity_label=payload.name.strip() if payload.name else existing["name"],
+                    entity_label=payload.name.strip()
+                    if payload.name
+                    else existing["name"],
                     changes=changes,
                 )
             conn.commit()

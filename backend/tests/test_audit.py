@@ -18,6 +18,7 @@ import main
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _auth_headers(client: TestClient) -> Dict[str, str]:
     """Bootstrap an admin user and return auth headers."""
     resp = client.post(
@@ -86,6 +87,7 @@ def _member_headers(client: TestClient, auth: Dict[str, str]) -> Dict[str, str]:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def client(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -105,6 +107,7 @@ def auth(client: TestClient) -> Dict[str, str]:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_audit_logs_require_admin(client: TestClient, auth: Dict[str, str]):
     """Non-admin (member) user gets 403 when accessing GET /api/audit-logs."""
@@ -356,5 +359,9 @@ def test_audit_log_on_user_create(client: TestClient, auth: Dict[str, str]):
     assert len(items) >= 1
 
     # Find the entry for our specific user
-    matching = [i for i in items if i["entityLabel"] == "audituser" or "audituser" in str(i.get("changes", ""))]
+    matching = [
+        i
+        for i in items
+        if i["entityLabel"] == "audituser" or "audituser" in str(i.get("changes", ""))
+    ]
     assert len(matching) >= 1
