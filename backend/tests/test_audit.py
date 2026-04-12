@@ -1,3 +1,4 @@
+import json
 import sys
 from datetime import date
 from pathlib import Path
@@ -365,3 +366,80 @@ def test_audit_log_on_user_create(client: TestClient, auth: Dict[str, str]):
         if i["entityLabel"] == "audituser" or "audituser" in str(i.get("changes", ""))
     ]
     assert len(matching) >= 1
+
+
+def test_audit_log_never_records_password_plaintext(
+    client: TestClient, auth: Dict[str, str]
+):
+    """Password plaintext must never appear in any audit log row.
+
+    Covers two boundaries:
+      * POST /api/auth/users — create_user must not include the password
+        field in its audit changes.
+      * PATCH /api/auth/me — update_me redacts password diffs and skips
+        the audit row entirely when the new password matches the old one.
+    """
+    secret = "plaintext-should-not-leak-xyz"
+
+    # Create a user via admin endpoint.
+    resp = client.post(
+        "/api/auth/users",
+        json={
+            "username": "pwuser",
+            "display_name": "PW User",
+            "password": secret,
+            "role": "member",
+        },
+        headers=auth,
+    )
+    assert resp.status_code == 201
+
+    # Log in as the new user and PATCH their own password to the SAME value.
+    login = client.post(
+        "/api/auth/login",
+        json={"username": "pwuser", "password": secret},
+    )
+    assert login.status_code == 200
+    pw_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    resp = client.patch("/api/auth/me", json={"password": secret}, headers=pw_headers)
+    assert resp.status_code == 200
+
+    # And a real password change.
+    resp = client.patch(
+        "/api/auth/me", json={"password": "a-different-password-1"}, headers=pw_headers
+    )
+    assert resp.status_code == 200
+
+    # Inspect every audit row touching users.
+    resp = client.get("/api/audit-logs", params={"entityType": "user"}, headers=auth)
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+
+    for entry in items:
+        serialized = json.dumps(entry, ensure_ascii=False)
+        assert secret not in serialized, (
+            f"password plaintext leaked into audit: {entry}"
+        )
+        assert "a-different-password-1" not in serialized
+        changes = entry.get("changes") or {}
+        if "password" in changes:
+            # Real password changes are logged only as redacted sentinels.
+            assert changes["password"] == {"old": "[redacted]", "new": "[redacted]"}
+
+    # create_user must not embed a password field in its changes at all.
+    create_entries = [
+        e for e in items if e["action"] == "create" and e["entityLabel"] == "pwuser"
+    ]
+    assert len(create_entries) == 1
+    assert "password" not in (create_entries[0].get("changes") or {})
+
+    # The no-op update_me (same password) must NOT have produced an update row
+    # for this user. Only the real change should be present.
+    pwuser_updates = [
+        e for e in items if e["action"] == "update" and e["entityLabel"] == "pwuser"
+    ]
+    assert len(pwuser_updates) == 1
+    assert pwuser_updates[0]["changes"] == {
+        "password": {"old": "[redacted]", "new": "[redacted]"}
+    }

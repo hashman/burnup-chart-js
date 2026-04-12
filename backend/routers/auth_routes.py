@@ -153,6 +153,12 @@ def update_me(
         values.append(now)
         values.append(current_user["id"])
         with get_connection() as conn:
+            # Read the stored hash so we can detect no-op password changes.
+            # current_user (from get_current_user) does not carry password_hash.
+            current_hash_row = conn.execute(
+                "SELECT password_hash FROM users WHERE id = ?",
+                (current_user["id"],),
+            ).fetchone()
             conn.execute(f"UPDATE users SET {', '.join(fields)} WHERE id = ?", values)
             changes = {}
             if (
@@ -165,7 +171,9 @@ def update_me(
                 }
             if payload.email is not None and payload.email != current_user["email"]:
                 changes["email"] = {"old": current_user["email"], "new": payload.email}
-            if payload.password is not None:
+            if payload.password is not None and not verify_password(
+                payload.password, current_hash_row["password_hash"]
+            ):
                 changes["password"] = {"old": "[redacted]", "new": "[redacted]"}
             if changes:
                 record_audit(
