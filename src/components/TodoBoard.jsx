@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Plus, EyeOff, Eye, Filter, X, GripVertical, Play, Flag, ArrowUpDown } from 'lucide-react';
+import { Plus, EyeOff, Eye, Filter, X, GripVertical, Play, Flag, ArrowUpDown, PanelRight, Square } from 'lucide-react';
 import TodoCard from './TodoCard';
 import TodoFormModal from './TodoFormModal';
 
@@ -23,7 +23,16 @@ export default function TodoBoard({
   const [showFilters, setShowFilters] = useState(false);
 
   // Sort: null | 'priority-desc' | 'priority-asc' | 'dueDate-asc' | 'dueDate-desc'
-  const [sortBy, setSortBy] = useState(null);
+  const [sortBy, setSortBy] = useState('dueDate-asc');
+
+  // Edit panel variant: 'drawer' (default) | 'modal', persisted in localStorage
+  const [editVariant, setEditVariant] = useState(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('todoEditVariant') : null;
+    return saved === 'modal' || saved === 'drawer' ? saved : 'drawer';
+  });
+  useEffect(() => {
+    localStorage.setItem('todoEditVariant', editVariant);
+  }, [editVariant]);
 
   const toggleFilter = (setter, value) => {
     setter(prev => {
@@ -269,13 +278,23 @@ export default function TodoBoard({
             到期日{sortBy === 'dueDate-asc' ? ' ↑' : sortBy === 'dueDate-desc' ? ' ↓' : ''}
           </button>
         </div>
-        <button
-          onClick={() => setHideDone(h => !h)}
-          className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
-        >
-          {hideDone ? <Eye size={14} /> : <EyeOff size={14} />}
-          {hideDone ? `顯示${endStatusName}` : `隱藏${endStatusName}`}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setEditVariant(v => v === 'drawer' ? 'modal' : 'drawer')}
+            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+            title={editVariant === 'drawer' ? '切換為置中視窗' : '切換為右側面板'}
+          >
+            {editVariant === 'drawer' ? <PanelRight size={14} /> : <Square size={14} />}
+            {editVariant === 'drawer' ? '右側面板' : '置中視窗'}
+          </button>
+          <button
+            onClick={() => setHideDone(h => !h)}
+            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+          >
+            {hideDone ? <Eye size={14} /> : <EyeOff size={14} />}
+            {hideDone ? `顯示${endStatusName}` : `隱藏${endStatusName}`}
+          </button>
+        </div>
       </div>
 
       {/* Filter bar */}
@@ -453,6 +472,7 @@ export default function TodoBoard({
           onCreateComment={onCreateComment}
           onUpdateComment={onUpdateComment}
           onDeleteComment={onDeleteComment}
+          variant={editVariant}
         />
       )}
     </div>

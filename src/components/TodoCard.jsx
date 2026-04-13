@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar } from 'lucide-react';
+import { Calendar, MessageSquare } from 'lucide-react';
 
 const PRIORITY_STYLES = {
   high: { border: 'border-l-red-500', badge: 'bg-red-50 text-red-600' },
@@ -8,6 +8,29 @@ const PRIORITY_STYLES = {
 };
 
 const PRIORITY_LABELS = { high: '高', medium: '中', low: '低' };
+
+const ASSIGNEE_COLORS = [
+  'bg-rose-400',
+  'bg-orange-400',
+  'bg-amber-400',
+  'bg-lime-500',
+  'bg-emerald-500',
+  'bg-teal-500',
+  'bg-cyan-500',
+  'bg-sky-500',
+  'bg-indigo-400',
+  'bg-violet-500',
+  'bg-fuchsia-500',
+  'bg-pink-500',
+];
+
+function assigneeColor(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  }
+  return ASSIGNEE_COLORS[Math.abs(hash) % ASSIGNEE_COLORS.length];
+}
 
 export default function TodoCard({ todo, isDone, onEdit, onDragStart, onDragEnd, allTasks }) {
   const ps = PRIORITY_STYLES[todo.priority] || PRIORITY_STYLES.medium;
@@ -58,13 +81,19 @@ export default function TodoCard({ todo, isDone, onEdit, onDragStart, onDragEnd,
         <div className="flex items-center gap-1">
           {todo.assignee && (
             <>
-              <div className="w-5 h-5 rounded-full bg-indigo-400 text-white flex items-center justify-center text-[10px] font-bold">
+              <div className={`w-5 h-5 rounded-full ${assigneeColor(todo.assignee)} text-white flex items-center justify-center text-[10px] font-bold`}>
                 {todo.assignee.charAt(0).toUpperCase()}
               </div>
               <span>{todo.assignee}</span>
             </>
           )}
         </div>
+        {todo.comments && todo.comments.length > 0 && (
+          <span className="flex items-center gap-0.5" title={`${todo.comments.length} 則留言`}>
+            <MessageSquare size={11} />
+            {todo.comments.length}
+          </span>
+        )}
         {todo.dueDate && (
           <span className={`flex items-center gap-0.5 ${isOverdue ? 'text-red-500 font-semibold' : ''}`}>
             <Calendar size={11} />
