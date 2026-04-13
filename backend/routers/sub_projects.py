@@ -302,15 +302,11 @@ def update_sub_project(
                 (sub_project_id,),
             ).fetchall()
         ]
-        waiting = _active_waiting_counts(conn, [sub_project_id]).get(
-            sub_project_id, 0
-        )
+        waiting = _active_waiting_counts(conn, [sub_project_id]).get(sub_project_id, 0)
     return row_to_sub_project(row, task_ids, waiting)
 
 
-@router.delete(
-    "/sub-projects/{sub_project_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/sub-projects/{sub_project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_sub_project(
     sub_project_id: str,
     _current_user: dict = Depends(require_member_or_admin),
@@ -352,9 +348,7 @@ def _validate_parent(
         if not row:
             raise HTTPException(status_code=404, detail="Sub-project not found")
     elif parent_type == "todo":
-        row = conn.execute(
-            "SELECT 1 FROM todos WHERE id = ?", (parent_id,)
-        ).fetchone()
+        row = conn.execute("SELECT 1 FROM todos WHERE id = ?", (parent_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Todo not found")
     else:

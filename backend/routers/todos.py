@@ -202,9 +202,7 @@ def update_todo(
                     (payload.subProjectId,),
                 ).fetchone()
                 if not sp_row:
-                    raise HTTPException(
-                        status_code=400, detail="Sub-project not found"
-                    )
+                    raise HTTPException(status_code=400, detail="Sub-project not found")
             fields.append("sub_project_id = ?")
             values.append(payload.subProjectId or None)
         if payload.sortOrder is not None:

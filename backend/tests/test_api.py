@@ -1162,9 +1162,7 @@ def test_sub_project_crud(client: TestClient, auth: Dict[str, str]) -> None:
     assert sp["tags"] == ["auth", "sec"]
 
     # list by burnup project
-    resp = client.get(
-        f"/api/projects/{project['id']}/sub-projects", headers=auth
-    )
+    resp = client.get(f"/api/projects/{project['id']}/sub-projects", headers=auth)
     assert resp.status_code == 200
     assert len(resp.json()) == 1
 
@@ -1186,9 +1184,7 @@ def test_sub_project_crud(client: TestClient, auth: Dict[str, str]) -> None:
     # delete
     resp = client.delete(f"/api/sub-projects/{sp['id']}", headers=auth)
     assert resp.status_code == 204
-    resp = client.get(
-        f"/api/projects/{project['id']}/sub-projects", headers=auth
-    )
+    resp = client.get(f"/api/projects/{project['id']}/sub-projects", headers=auth)
     assert resp.json() == []
 
 
@@ -1229,9 +1225,7 @@ def test_sub_project_link_unknown_task_rejected(
     assert resp.status_code == 400
 
 
-def test_sub_project_event_crud(
-    client: TestClient, auth: Dict[str, str]
-) -> None:
+def test_sub_project_event_crud(client: TestClient, auth: Dict[str, str]) -> None:
     project = create_project(client, "Big", headers=auth)
     sp = _make_sub_project(client, auth, project["id"])
 
@@ -1256,16 +1250,12 @@ def test_sub_project_event_crud(
     assert resp.status_code == 201
 
     # list events
-    resp = client.get(
-        f"/api/sub-projects/{sp['id']}/events", headers=auth
-    )
+    resp = client.get(f"/api/sub-projects/{sp['id']}/events", headers=auth)
     assert resp.status_code == 200
     assert len(resp.json()) == 2
 
     # waiting count on sub-project
-    resp = client.get(
-        f"/api/projects/{project['id']}/sub-projects", headers=auth
-    )
+    resp = client.get(f"/api/projects/{project['id']}/sub-projects", headers=auth)
     assert resp.json()[0]["activeWaitingCount"] == 1
 
     # resolve the waiting event
@@ -1278,9 +1268,7 @@ def test_sub_project_event_crud(
     assert resp.json()["resolvedAt"] == "2026-04-20T10:00:00"
 
     # waiting count now 0
-    resp = client.get(
-        f"/api/projects/{project['id']}/sub-projects", headers=auth
-    )
+    resp = client.get(f"/api/projects/{project['id']}/sub-projects", headers=auth)
     assert resp.json()[0]["activeWaitingCount"] == 0
 
     # delete event
@@ -1320,9 +1308,7 @@ def test_sub_project_event_parent_must_exist(
 
 
 def test_todo_event_crud(client: TestClient, auth: Dict[str, str]) -> None:
-    resp = client.post(
-        "/api/todos", json={"title": "t"}, headers=auth
-    )
+    resp = client.post("/api/todos", json={"title": "t"}, headers=auth)
     assert resp.status_code == 201
     todo_id = resp.json()["id"]
 
@@ -1339,9 +1325,7 @@ def test_todo_event_crud(client: TestClient, auth: Dict[str, str]) -> None:
     assert len(resp.json()) == 1
 
 
-def test_todo_sub_project_link(
-    client: TestClient, auth: Dict[str, str]
-) -> None:
+def test_todo_sub_project_link(client: TestClient, auth: Dict[str, str]) -> None:
     project = create_project(client, "Big", headers=auth)
     sp = _make_sub_project(client, auth, project["id"])
 
