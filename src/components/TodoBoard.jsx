@@ -23,7 +23,7 @@ export default function TodoBoard({
   const [showFilters, setShowFilters] = useState(false);
 
   // Sort: null | 'priority-desc' | 'priority-asc' | 'dueDate-asc' | 'dueDate-desc'
-  const [sortBy, setSortBy] = useState(null);
+  const [sortBy, setSortBy] = useState('dueDate-asc');
 
   const toggleFilter = (setter, value) => {
     setter(prev => {
