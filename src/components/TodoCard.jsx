@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar } from 'lucide-react';
+import { Calendar, MessageSquare } from 'lucide-react';
 
 const PRIORITY_STYLES = {
   high: { border: 'border-l-red-500', badge: 'bg-red-50 text-red-600' },
@@ -88,6 +88,12 @@ export default function TodoCard({ todo, isDone, onEdit, onDragStart, onDragEnd,
             </>
           )}
         </div>
+        {todo.comments && todo.comments.length > 0 && (
+          <span className="flex items-center gap-0.5" title={`${todo.comments.length} 則留言`}>
+            <MessageSquare size={11} />
+            {todo.comments.length}
+          </span>
+        )}
         {todo.dueDate && (
           <span className={`flex items-center gap-0.5 ${isOverdue ? 'text-red-500 font-semibold' : ''}`}>
             <Calendar size={11} />
