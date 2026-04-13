@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { X, Trash2, Send, Pencil } from 'lucide-react';
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
@@ -24,7 +24,8 @@ function renderCommentContent(text) {
   });
 }
 
-export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, projects, allTags, allAssignees, onSave, onDelete, onClose, onCreateComment, onUpdateComment, onDeleteComment }) {
+export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, projects, allTags, allAssignees, onSave, onDelete, onClose, onCreateComment, onUpdateComment, onDeleteComment, variant = 'modal' }) {
+  const isDrawer = variant === 'drawer';
   const isEdit = !!todo;
   const startStatus = statuses.find(s => s.isDefaultStart);
 
@@ -41,6 +42,19 @@ export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, pro
   }), [todo, startStatus]);
 
   const [form, setForm] = useState(initialForm);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    if (!isDrawer) return;
+    const id = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(id);
+  }, [isDrawer]);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [commentInput, setCommentInput] = useState('');
@@ -111,16 +125,24 @@ export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, pro
   }, [allTags, form.tags]);
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[80] p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="flex justify-between items-center p-4 border-b border-gray-100">
+    <div className={`fixed inset-0 bg-black/40 z-[80] ${isDrawer ? '' : 'flex items-center justify-center p-4'}`} onClick={onClose}>
+      <div
+        className={
+          isDrawer
+            ? `fixed right-0 top-0 h-full w-[480px] max-w-full bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ease-out ${mounted ? 'translate-x-0' : 'translate-x-full'}`
+            : 'bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden'
+        }
+        onClick={e => e.stopPropagation()}
+      >
+        <div className={`flex justify-between items-center p-4 border-b border-gray-100 ${isDrawer ? 'shrink-0' : ''}`}>
           <h3 className="text-base font-bold text-gray-800">{isEdit ? '編輯 Todo' : '新增 Todo'}</h3>
           <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600">
             <X size={20} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-3">
+        <form onSubmit={handleSubmit} className={isDrawer ? 'flex-1 flex flex-col min-h-0' : ''}>
+          <div className={isDrawer ? 'flex-1 overflow-y-auto p-4 space-y-3' : 'p-4 space-y-3'}>
           {/* Title */}
           <div>
             <label className="text-xs font-medium text-gray-600 block mb-1">標題 *</label>
@@ -272,7 +294,7 @@ export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, pro
                             <textarea
                               value={editingCommentContent}
                               onChange={e => setEditingCommentContent(e.target.value)}
-                              onKeyDown={e => { if (e.key === 'Escape') setEditingCommentId(null); }}
+                              onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setEditingCommentId(null); } }}
                               className="w-full border border-indigo-300 rounded px-2 py-1 text-sm outline-none resize-none"
                               rows={2}
                               autoFocus
@@ -326,8 +348,13 @@ export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, pro
             </div>
           )}
 
+          </div>
+
           {/* Buttons */}
-          <div className="flex justify-between items-center pt-2">
+          <div className={isDrawer
+            ? 'border-t border-gray-100 p-3 flex justify-between items-center shrink-0 bg-white'
+            : 'flex justify-between items-center px-4 pb-4 pt-2'
+          }>
             {isEdit && !showDeleteConfirm && (
               <button
                 type="button"
