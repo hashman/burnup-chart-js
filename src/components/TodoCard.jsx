@@ -32,7 +32,7 @@ function assigneeColor(name) {
   return ASSIGNEE_COLORS[Math.abs(hash) % ASSIGNEE_COLORS.length];
 }
 
-export default function TodoCard({ todo, isDone, onEdit, onDragStart, onDragEnd, allTasks }) {
+export default function TodoCard({ todo, isDone, onEdit, onDragStart, onDragEnd, allTasks, subProject }) {
   const ps = PRIORITY_STYLES[todo.priority] || PRIORITY_STYLES.medium;
 
   const linkedTask = todo.linkedTaskId
@@ -67,8 +67,13 @@ export default function TodoCard({ todo, isDone, onEdit, onDragStart, onDragEnd,
         </span>
       </div>
 
-      {/* Linked Task */}
-      <div className="text-xs text-gray-500 mb-2">
+      {/* Sub-project + Linked Task */}
+      <div className="text-xs text-gray-500 mb-2 flex items-center gap-1.5 flex-wrap">
+        {subProject && (
+          <span className="bg-violet-50 text-violet-700 px-1.5 py-0.5 rounded text-[11px] font-medium">
+            {subProject.name}
+          </span>
+        )}
         {linkedTask ? (
           <span className="text-indigo-500">🔗 {linkedTask.name}</span>
         ) : todo.linkedTaskId ? (

@@ -24,7 +24,7 @@ function renderCommentContent(text) {
   });
 }
 
-export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, projects, allTags, allAssignees, onSave, onDelete, onClose, onCreateComment, onUpdateComment, onDeleteComment, variant = 'modal' }) {
+export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, projects, allTags, allAssignees, subProjects = [], onSave, onDelete, onClose, onCreateComment, onUpdateComment, onDeleteComment, variant = 'modal' }) {
   const isDrawer = variant === 'drawer';
   const isEdit = !!todo;
   const startStatus = statuses.find(s => s.isDefaultStart);
@@ -39,6 +39,7 @@ export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, pro
     tagInput: '',
     note: todo?.note || '',
     linkedTaskId: todo?.linkedTaskId || '',
+    subProjectId: todo?.subProjectId || '',
   }), [todo, startStatus]);
 
   const [form, setForm] = useState(initialForm);
@@ -117,6 +118,7 @@ export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, pro
       tags: finalTags,
       note: form.note || null,
       linkedTaskId: form.linkedTaskId || null,
+      subProjectId: form.subProjectId || '',
     });
   };
 
@@ -250,6 +252,23 @@ export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, pro
             <datalist id="tag-suggestions">
               {tagSuggestions.map(t => <option key={t} value={t} />)}
             </datalist>
+          </div>
+
+          {/* Sub-project */}
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">所屬 Sub-project</label>
+            <select
+              value={form.subProjectId}
+              onChange={e => setForm(f => ({ ...f, subProjectId: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none"
+            >
+              <option value="">無</option>
+              {subProjects.map(sp => {
+                const proj = projects.find(p => p.id === sp.burnupProjectId);
+                const label = proj ? `${proj.name} / ${sp.name}` : sp.name;
+                return <option key={sp.id} value={sp.id}>{label}</option>;
+              })}
+            </select>
           </div>
 
           {/* Linked Task */}

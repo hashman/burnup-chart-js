@@ -4,7 +4,7 @@ import TodoCard from './TodoCard';
 import TodoFormModal from './TodoFormModal';
 
 export default function TodoBoard({
-  todos, statuses, allTasks, projects,
+  todos, statuses, allTasks, projects, subProjects = [],
   onCreateTodo, onUpdateTodo, onDeleteTodo,
   onCreateStatus, onUpdateStatus, onDeleteStatus, onReorderStatuses,
   onCreateComment, onUpdateComment, onDeleteComment,
@@ -20,6 +20,7 @@ export default function TodoBoard({
   const [filterAssignees, setFilterAssignees] = useState(new Set());
   const [filterPriorities, setFilterPriorities] = useState(new Set());
   const [filterTags, setFilterTags] = useState(new Set());
+  const [filterSubProjectId, setFilterSubProjectId] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
   // Sort: null | 'priority-desc' | 'priority-asc' | 'dueDate-asc' | 'dueDate-desc'
@@ -74,9 +75,16 @@ export default function TodoBoard({
       if (filterAssignees.size > 0 && !filterAssignees.has(t.assignee || '')) return false;
       if (filterPriorities.size > 0 && !filterPriorities.has(t.priority)) return false;
       if (filterTags.size > 0 && !(t.tags || []).some(tag => filterTags.has(tag))) return false;
+      if (filterSubProjectId && (t.subProjectId || '') !== filterSubProjectId) return false;
       return true;
     });
-  }, [todos, filterAssignees, filterPriorities, filterTags]);
+  }, [todos, filterAssignees, filterPriorities, filterTags, filterSubProjectId]);
+
+  const subProjectById = useMemo(() => {
+    const map = new Map();
+    subProjects.forEach(sp => map.set(sp.id, sp));
+    return map;
+  }, [subProjects]);
 
   const columnTodos = useMemo(() => {
     const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
@@ -232,7 +240,7 @@ export default function TodoBoard({
     setEditingTodoId(null);
   };
 
-  const hasActiveFilters = filterAssignees.size > 0 || filterPriorities.size > 0 || filterTags.size > 0;
+  const hasActiveFilters = filterAssignees.size > 0 || filterPriorities.size > 0 || filterTags.size > 0 || !!filterSubProjectId;
   const endStatus = statuses.find(s => s.isDefaultEnd);
   const endStatusName = endStatus ? endStatus.name : '已完成';
 
@@ -255,12 +263,25 @@ export default function TodoBoard({
           </button>
           {hasActiveFilters && (
             <button
-              onClick={() => { setFilterAssignees(new Set()); setFilterPriorities(new Set()); setFilterTags(new Set()); }}
+              onClick={() => { setFilterAssignees(new Set()); setFilterPriorities(new Set()); setFilterTags(new Set()); setFilterSubProjectId(''); }}
               className="text-xs text-gray-400 hover:text-gray-600"
             >
               清除篩選
             </button>
           )}
+          <select
+            value={filterSubProjectId}
+            onChange={e => setFilterSubProjectId(e.target.value)}
+            className={`text-xs px-2 py-1.5 border rounded-lg outline-none ${filterSubProjectId ? 'border-violet-300 text-violet-700 bg-violet-50' : 'border-gray-200 text-gray-500'}`}
+            title="篩選 sub-project"
+          >
+            <option value="">所有 sub-project</option>
+            {subProjects.map(sp => {
+              const proj = projects.find(p => p.id === sp.burnupProjectId);
+              const label = proj ? `${proj.name} / ${sp.name}` : sp.name;
+              return <option key={sp.id} value={sp.id}>{label}</option>;
+            })}
+          </select>
           <span className="w-px h-5 bg-gray-200" />
           {/* Sort buttons */}
           <button
@@ -436,6 +457,7 @@ export default function TodoBoard({
                       onDragStart={setDraggingId}
                       onDragEnd={() => { setDraggingId(null); setDragOverColumn(null); }}
                       allTasks={allTasks}
+                      subProject={todo.subProjectId ? subProjectById.get(todo.subProjectId) : null}
                     />
                   ))
                 )}
@@ -466,6 +488,7 @@ export default function TodoBoard({
           projects={projects}
           allTags={allTags}
           allAssignees={allAssignees}
+          subProjects={subProjects}
           onSave={handleSave}
           onDelete={handleDelete}
           onClose={() => { setShowFormModal(false); setEditingTodoId(null); }}

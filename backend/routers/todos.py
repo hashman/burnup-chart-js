@@ -50,6 +50,7 @@ def row_to_todo(
         "tags": _json.loads(row["tags"]) if row["tags"] else [],
         "note": normalize_text(row["note"]) or None,
         "linkedTaskId": normalize_text(row["linked_task_id"]) or None,
+        "subProjectId": normalize_text(row["sub_project_id"]) or None,
         "createdAt": row["created_at"],
         "sortOrder": row["sort_order"],
         "comments": comments or [],
@@ -118,10 +119,17 @@ def create_todo(
             if not task_row:
                 raise HTTPException(status_code=404, detail="Linked task not found")
 
+        if payload.subProjectId:
+            sp_row = conn.execute(
+                "SELECT 1 FROM sub_projects WHERE id = ?", (payload.subProjectId,)
+            ).fetchone()
+            if not sp_row:
+                raise HTTPException(status_code=400, detail="Sub-project not found")
+
         conn.execute(
             """INSERT INTO todos (id, title, status, priority, due_date, assignee,
-               tags, note, linked_task_id, created_at, sort_order)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               tags, note, linked_task_id, sub_project_id, created_at, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 todo_id,
                 payload.title,
@@ -132,6 +140,7 @@ def create_todo(
                 _json.dumps(payload.tags),
                 payload.note or "",
                 payload.linkedTaskId or None,
+                payload.subProjectId or None,
                 now,
                 0,
             ),
@@ -186,6 +195,18 @@ def update_todo(
         if payload.linkedTaskId is not None:
             fields.append("linked_task_id = ?")
             values.append(payload.linkedTaskId)
+        if payload.subProjectId is not None:
+            if payload.subProjectId:
+                sp_row = conn.execute(
+                    "SELECT 1 FROM sub_projects WHERE id = ?",
+                    (payload.subProjectId,),
+                ).fetchone()
+                if not sp_row:
+                    raise HTTPException(
+                        status_code=400, detail="Sub-project not found"
+                    )
+            fields.append("sub_project_id = ?")
+            values.append(payload.subProjectId or None)
         if payload.sortOrder is not None:
             fields.append("sort_order = ?")
             values.append(payload.sortOrder)

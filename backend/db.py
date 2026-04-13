@@ -109,6 +109,46 @@ def init_db() -> None:
                 FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE,
                 FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL
             );
+            CREATE TABLE IF NOT EXISTS sub_projects (
+                id TEXT PRIMARY KEY,
+                burnup_project_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                owner TEXT,
+                due_date TEXT,
+                priority TEXT NOT NULL DEFAULT 'medium',
+                tags TEXT NOT NULL DEFAULT '[]',
+                sort_order REAL NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                created_by TEXT,
+                FOREIGN KEY (burnup_project_id) REFERENCES projects(id) ON DELETE CASCADE,
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_sub_projects_burnup ON sub_projects(burnup_project_id);
+            CREATE TABLE IF NOT EXISTS sub_project_tasks (
+                sub_project_id TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                PRIMARY KEY (sub_project_id, task_id),
+                FOREIGN KEY (sub_project_id) REFERENCES sub_projects(id) ON DELETE CASCADE,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS sub_project_events (
+                id TEXT PRIMARY KEY,
+                parent_type TEXT NOT NULL CHECK (parent_type IN ('sub_project', 'todo')),
+                parent_id TEXT NOT NULL,
+                type TEXT NOT NULL CHECK (type IN ('waiting', 'note', 'decision')),
+                title TEXT NOT NULL,
+                body TEXT,
+                waiting_on TEXT,
+                started_at TEXT NOT NULL,
+                resolved_at TEXT,
+                created_at TEXT NOT NULL,
+                created_by TEXT,
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_sub_project_events_parent ON sub_project_events(parent_type, parent_id);
+            CREATE INDEX IF NOT EXISTS idx_sub_project_events_active ON sub_project_events(type, resolved_at);
             """
         )
         # Seed default statuses if table is empty
@@ -161,3 +201,7 @@ def init_db() -> None:
         }
         if "author_id" not in log_columns:
             conn.execute("ALTER TABLE logs ADD COLUMN author_id TEXT")
+
+        # Add sub_project_id to todos if missing
+        if "sub_project_id" not in todo_columns:
+            conn.execute("ALTER TABLE todos ADD COLUMN sub_project_id TEXT")
