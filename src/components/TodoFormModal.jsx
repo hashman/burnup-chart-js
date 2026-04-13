@@ -1,6 +1,29 @@
 import React, { useState, useMemo } from 'react';
 import { X, Trash2, Send, Pencil } from 'lucide-react';
 
+const URL_REGEX = /(https?:\/\/[^\s]+)/g;
+
+function renderCommentContent(text) {
+  const parts = text.split(URL_REGEX);
+  return parts.map((part, i) => {
+    if (i % 2 === 1) {
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-indigo-600 hover:underline break-all"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {part}
+        </a>
+      );
+    }
+    return <React.Fragment key={i}>{part}</React.Fragment>;
+  });
+}
+
 export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, projects, allTags, allAssignees, onSave, onDelete, onClose, onCreateComment, onUpdateComment, onDeleteComment }) {
   const isEdit = !!todo;
   const startStatus = statuses.find(s => s.isDefaultStart);
@@ -263,7 +286,7 @@ export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, pro
                         ) : (
                           <div className="flex items-start justify-between">
                             <div>
-                              <p className="text-gray-700">{c.content}</p>
+                              <p className="text-gray-700 whitespace-pre-wrap break-words">{renderCommentContent(c.content)}</p>
                               <span className="text-[10px] text-gray-400">
                                 {new Date(c.createdAt).toLocaleString('zh-TW')}
                                 {c.updatedAt !== c.createdAt && ' (已編輯)'}
