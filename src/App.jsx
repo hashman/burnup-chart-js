@@ -6,6 +6,7 @@ import TodoBoard from './components/TodoBoard';
 import TodoSection from './components/TodoSection';
 import SubProjectSection from './components/SubProjectSection';
 import SearchModal from './components/SearchModal';
+import KeyboardShortcutsHelp from './components/KeyboardShortcutsHelp';
 import { requestJson } from './api';
 import { useAuth } from './auth/AuthContext';
 import LoginPage from './auth/LoginPage';
@@ -2967,6 +2968,7 @@ function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }
       </div>
       </>
       )}
+      <KeyboardShortcutsHelp />
     </div>
   );
 }
