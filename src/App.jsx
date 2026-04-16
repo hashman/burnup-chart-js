@@ -2420,6 +2420,24 @@ function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }
               onClearInitialEditTodoId={() => setPendingEditTodoId(null)}
             />
           </div>
+          {/* Sub-projects section in Todo tab — grouped by burnup project */}
+          {projects.map(proj => {
+            const projSubs = subProjects.filter(sp => sp.burnupProjectId === proj.id);
+            if (projSubs.length === 0) return null;
+            return (
+              <SubProjectSection
+                key={proj.id}
+                burnupProjectId={proj.id}
+                burnupProjectName={proj.name}
+                subProjects={subProjects}
+                tasks={proj.tasks || []}
+                onCreate={handleCreateSubProject}
+                onUpdate={handleUpdateSubProject}
+                onDelete={handleDeleteSubProject}
+                onReload={reloadSubProjects}
+              />
+            );
+          })}
         </div>
       ) : (
       <>

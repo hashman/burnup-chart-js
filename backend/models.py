@@ -242,6 +242,7 @@ class SubProjectEventCreate(BaseModel):
     title: str
     body: Optional[str] = None
     waitingOn: Optional[str] = None
+    startedAt: Optional[str] = None
 
 
 class SubProjectEventUpdate(BaseModel):

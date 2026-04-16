@@ -364,6 +364,7 @@ def _create_event(
 ) -> Dict[str, Any]:
     event_id = f"spe_{uuid4().hex}"
     now = utc_now()
+    started = payload.startedAt or now
     conn.execute(
         """INSERT INTO sub_project_events (
             id, parent_type, parent_id, type, title, body, waiting_on,
@@ -377,7 +378,7 @@ def _create_event(
             payload.title,
             payload.body,
             payload.waitingOn if payload.type == "waiting" else None,
-            now,
+            started,
             now,
             user_id,
         ),

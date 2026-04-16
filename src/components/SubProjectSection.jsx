@@ -35,6 +35,11 @@ function SubProjectCard({ subProject, tasks, onEdit, onReload }) {
   const [newType, setNewType] = useState('waiting');
   const [newTitle, setNewTitle] = useState('');
   const [newWaitingOn, setNewWaitingOn] = useState('');
+  const todayLocal = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  };
+  const [newStartedAt, setNewStartedAt] = useState(todayLocal);
 
   const statusStyle = STATUS_STYLES[subProject.status] || STATUS_STYLES.active;
   const priorityStyle = PRIORITY_STYLES[subProject.priority] || PRIORITY_STYLES.medium;
@@ -68,6 +73,7 @@ function SubProjectCard({ subProject, tasks, onEdit, onReload }) {
     try {
       const payload = { type: newType, title };
       if (newType === 'waiting' && newWaitingOn.trim()) payload.waitingOn = newWaitingOn.trim();
+      if (newStartedAt) payload.startedAt = new Date(newStartedAt).toISOString();
       const created = await requestJson(`/api/sub-projects/${subProject.id}/events`, {
         method: 'POST',
         body: JSON.stringify(payload),
@@ -75,6 +81,7 @@ function SubProjectCard({ subProject, tasks, onEdit, onReload }) {
       setEvents(prev => [created, ...(prev || [])]);
       setNewTitle('');
       setNewWaitingOn('');
+      setNewStartedAt(todayLocal());
       if (newType === 'waiting') onReload();
     } catch (err) {
       console.error(err);
@@ -198,6 +205,15 @@ function SubProjectCard({ subProject, tasks, onEdit, onReload }) {
                 placeholder="在等誰？例：PM / DevOps / User"
               />
             )}
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] text-gray-500 shrink-0">時間</label>
+              <input
+                type="datetime-local"
+                value={newStartedAt}
+                onChange={e => setNewStartedAt(e.target.value)}
+                className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs outline-none focus:border-indigo-400"
+              />
+            </div>
             <div className="flex justify-end">
               <button
                 type="button"
@@ -278,6 +294,7 @@ function SubProjectCard({ subProject, tasks, onEdit, onReload }) {
 
 export default function SubProjectSection({
   burnupProjectId,
+  burnupProjectName,
   subProjects,
   tasks,
   onCreate,
@@ -321,7 +338,7 @@ export default function SubProjectSection({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <MessageSquare size={18} className="text-indigo-500" />
-          <h3 className="text-base font-bold text-gray-800">Sub-projects / 工作追蹤</h3>
+          <h3 className="text-base font-bold text-gray-800">{burnupProjectName ? `${burnupProjectName} — ` : ''}Sub-projects</h3>
           <span className="text-xs text-gray-400">({projectSubProjects.length})</span>
         </div>
         <button

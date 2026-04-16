@@ -29,7 +29,7 @@ export default function TodoBoard({
   // Edit panel variant: 'drawer' (default) | 'modal', persisted in localStorage
   const [editVariant, setEditVariant] = useState(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('todoEditVariant') : null;
-    return saved === 'modal' || saved === 'drawer' ? saved : 'drawer';
+    return saved === 'modal' || saved === 'drawer' ? saved : 'modal';
   });
   useEffect(() => {
     localStorage.setItem('todoEditVariant', editVariant);
