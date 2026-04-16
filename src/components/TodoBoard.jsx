@@ -53,8 +53,10 @@ export default function TodoBoard({
   const editingTodo = useMemo(() => editingTodoId ? todos.find(t => t.id === editingTodoId) || null : null, [editingTodoId, todos]);
 
   useEffect(() => {
-    if (initialEditTodoId && onClearInitialEditTodoId) {
-      onClearInitialEditTodoId();
+    if (initialEditTodoId) {
+      setEditingTodoId(initialEditTodoId);
+      setShowFormModal(true);
+      if (onClearInitialEditTodoId) onClearInitialEditTodoId();
     }
   }, [initialEditTodoId, onClearInitialEditTodoId]);
 

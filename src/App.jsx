@@ -5,6 +5,7 @@ import Holidays from 'date-holidays';
 import TodoBoard from './components/TodoBoard';
 import TodoSection from './components/TodoSection';
 import SubProjectSection from './components/SubProjectSection';
+import SearchModal from './components/SearchModal';
 import { requestJson } from './api';
 import { useAuth } from './auth/AuthContext';
 import LoginPage from './auth/LoginPage';
@@ -448,6 +449,18 @@ function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }
   const [todos, setTodos] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [subProjects, setSubProjects] = useState([]);
+  const [showSearch, setShowSearch] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowSearch(v => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const [pendingEditTodoId, setPendingEditTodoId] = useState(null);
 
   const { getExpectedEndDate, getExpectedPoints, loading: _holidayLoading } = useTaiwanCalendar();
@@ -1968,6 +1981,19 @@ function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 font-sans pb-10">
+      {showSearch && (
+        <SearchModal
+          todos={todos}
+          subProjects={subProjects}
+          statuses={statuses}
+          onSelect={(todoId) => {
+            setShowSearch(false);
+            setPendingEditTodoId(todoId);
+            setActiveProjectId(TODO_TAB_ID);
+          }}
+          onClose={() => setShowSearch(false)}
+        />
+      )}
       <datalist id="people-options">
         {uniquePeople.map(person => (
           <option key={person} value={person} />
