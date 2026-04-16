@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from audit import record_audit
 from auth import get_current_user
 from db import get_connection
 from models import StatusCreate, StatusOut, StatusReorderItem, StatusUpdate
@@ -40,7 +41,7 @@ def list_statuses(
 )
 def create_status(
     payload: StatusCreate,
-    _current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_admin),
 ) -> Dict[str, Any]:
     name = payload.name.strip()
     if not name:
@@ -63,6 +64,15 @@ def create_status(
             "VALUES (?, ?, ?, 0, 0)",
             (status_id, name, sort_order),
         )
+        record_audit(
+            conn,
+            user=current_user,
+            action="create",
+            entity_type="status",
+            entity_id=status_id,
+            entity_label=name,
+            changes={"name": {"new": name}, "sortOrder": {"new": sort_order}},
+        )
         conn.commit()
 
         new_row = conn.execute(
@@ -76,7 +86,7 @@ def create_status(
 def update_status(
     status_id: str,
     payload: StatusUpdate,
-    _current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_admin),
 ) -> Dict[str, Any]:
     with get_connection() as conn:
         existing = conn.execute(
@@ -123,6 +133,44 @@ def update_status(
             conn.execute(
                 f"UPDATE statuses SET {', '.join(fields)} WHERE id = ?", values
             )
+            changes = {}
+            if payload.name is not None and payload.name.strip() != existing["name"]:
+                changes["name"] = {"old": existing["name"], "new": payload.name.strip()}
+            if (
+                payload.sort_order is not None
+                and payload.sort_order != existing["sort_order"]
+            ):
+                changes["sortOrder"] = {
+                    "old": existing["sort_order"],
+                    "new": payload.sort_order,
+                }
+            if (
+                payload.is_default_start is not None
+                and payload.is_default_start != bool(existing["is_default_start"])
+            ):
+                changes["isDefaultStart"] = {
+                    "old": bool(existing["is_default_start"]),
+                    "new": payload.is_default_start,
+                }
+            if payload.is_default_end is not None and payload.is_default_end != bool(
+                existing["is_default_end"]
+            ):
+                changes["isDefaultEnd"] = {
+                    "old": bool(existing["is_default_end"]),
+                    "new": payload.is_default_end,
+                }
+            if changes:
+                record_audit(
+                    conn,
+                    user=current_user,
+                    action="update",
+                    entity_type="status",
+                    entity_id=status_id,
+                    entity_label=payload.name.strip()
+                    if payload.name
+                    else existing["name"],
+                    changes=changes,
+                )
             conn.commit()
 
         row = conn.execute(
@@ -136,7 +184,7 @@ def update_status(
 def delete_status(
     status_id: str,
     migrate_to: Optional[str] = None,
-    _current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_admin),
 ) -> None:
     with get_connection() as conn:
         existing = conn.execute(
@@ -179,6 +227,15 @@ def delete_status(
             )
 
         conn.execute("DELETE FROM statuses WHERE id = ?", (status_id,))
+        record_audit(
+            conn,
+            user=current_user,
+            action="delete",
+            entity_type="status",
+            entity_id=status_id,
+            entity_label=existing["name"],
+            changes={"name": {"old": existing["name"]}},
+        )
         conn.commit()
 
     return None
@@ -187,13 +244,31 @@ def delete_status(
 @router.post("/statuses/reorder", response_model=List[StatusOut])
 def reorder_statuses(
     items: List[StatusReorderItem],
-    _current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_admin),
 ) -> List[Dict[str, Any]]:
     with get_connection() as conn:
+        existing_rows = conn.execute(
+            "SELECT id, name, sort_order FROM statuses"
+        ).fetchall()
+        existing_by_id = {row["id"]: row for row in existing_rows}
         for item in items:
             conn.execute(
                 "UPDATE statuses SET sort_order = ? WHERE id = ?",
                 (item.sortOrder, item.id),
+            )
+            prev = existing_by_id.get(item.id)
+            if prev is None or prev["sort_order"] == item.sortOrder:
+                continue
+            record_audit(
+                conn,
+                user=current_user,
+                action="update",
+                entity_type="status",
+                entity_id=item.id,
+                entity_label=prev["name"],
+                changes={
+                    "sortOrder": {"old": prev["sort_order"], "new": item.sortOrder}
+                },
             )
         conn.commit()
         rows = conn.execute("SELECT * FROM statuses ORDER BY sort_order").fetchall()

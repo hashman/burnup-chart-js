@@ -236,3 +236,27 @@ class TokenResponse(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+# ---------------------------------------------------------------------------
+# Audit log models
+# ---------------------------------------------------------------------------
+
+
+class AuditLogOut(BaseModel):
+    id: str
+    userId: Optional[str] = None
+    userDisplay: str
+    action: str
+    entityType: str
+    entityId: str
+    entityLabel: Optional[str] = None
+    changes: Optional[dict] = None
+    createdAt: str
+
+
+class AuditLogPage(BaseModel):
+    items: List[AuditLogOut]
+    total: int
+    page: int
+    pageSize: int
