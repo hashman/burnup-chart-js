@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Plus, EyeOff, Eye, Filter, X, GripVertical, Play, Flag, ArrowUpDown, PanelRight, Square } from 'lucide-react';
 import TodoCard from './TodoCard';
 import TodoFormModal from './TodoFormModal';
@@ -12,7 +12,7 @@ export default function TodoBoard({
 }) {
   const [editingTodoId, setEditingTodoId] = useState(initialEditTodoId || null);
   const [showFormModal, setShowFormModal] = useState(!!initialEditTodoId);
-  const prevInitialEditTodoIdRef = useRef(initialEditTodoId);
+  const [prevInitialEditTodoId, setPrevInitialEditTodoId] = useState(initialEditTodoId);
   const [_draggingId, setDraggingId] = useState(null);
   const [dragOverColumn, setDragOverColumn] = useState(null);
   const [hideDone, setHideDone] = useState(false);
@@ -53,8 +53,8 @@ export default function TodoBoard({
 
   const editingTodo = useMemo(() => editingTodoId ? todos.find(t => t.id === editingTodoId) || null : null, [editingTodoId, todos]);
 
-  if (initialEditTodoId && initialEditTodoId !== prevInitialEditTodoIdRef.current) {
-    prevInitialEditTodoIdRef.current = initialEditTodoId;
+  if (initialEditTodoId && initialEditTodoId !== prevInitialEditTodoId) {
+    setPrevInitialEditTodoId(initialEditTodoId);
     setEditingTodoId(initialEditTodoId);
     setShowFormModal(true);
     if (onClearInitialEditTodoId) onClearInitialEditTodoId();
