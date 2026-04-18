@@ -923,6 +923,12 @@ function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }
 
         if (task.actualEnd && task.actualEnd <= date) {
           actualCompleted += points;
+        } else if (task.actualStart && task.actualStart <= date) {
+          const tp = todoProgressByTask[task.id];
+          const progressRatio = tp && tp.total > 0
+            ? tp.done / tp.total
+            : Math.max(0, Math.min(100, task.progress ?? 0)) / 100;
+          actualCompleted += points * progressRatio;
         }
 
         if (task.addedDate === date) dayAdded.push(task.name);
@@ -974,7 +980,7 @@ function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }
     });
 
     return { chartData: data, chartAnnotations: annotations };
-  }, [normalizedTasks, dateRangeStats]);
+  }, [normalizedTasks, dateRangeStats, todoProgressByTask]);
 
   // --- Gantt Chart Rendering Logic ---
   const renderGanttChart = () => {
