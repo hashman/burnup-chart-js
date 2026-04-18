@@ -757,7 +757,13 @@ function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }
     if (!showCompleted) {
       filtered = filtered.filter(t => !(t.actualStart && t.actualEnd));
     }
-    return filtered;
+    return [...filtered].sort((a, b) => {
+      const aStart = a.expectedStart || '9999-12-31';
+      const bStart = b.expectedStart || '9999-12-31';
+      if (aStart < bStart) return -1;
+      if (aStart > bStart) return 1;
+      return 0;
+    });
   }, [allTasks, filterPerson, showCompleted]);
 
   // Find active task object for modal
