@@ -24,7 +24,7 @@ function renderCommentContent(text) {
   });
 }
 
-export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, projects, allTags, allAssignees, onSave, onDelete, onClose, onCreateComment, onUpdateComment, onDeleteComment, variant = 'modal' }) {
+export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, projects, allTags, allAssignees, subProjects = [], onSave, onDelete, onClose, onCreateComment, onUpdateComment, onDeleteComment, variant = 'modal' }) {
   const isDrawer = variant === 'drawer';
   const isEdit = !!todo;
   const startStatus = statuses.find(s => s.isDefaultStart);
@@ -39,6 +39,7 @@ export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, pro
     tagInput: '',
     note: todo?.note || '',
     linkedTaskId: todo?.linkedTaskId || '',
+    subProjectId: todo?.subProjectId || '',
   }), [todo, startStatus]);
 
   const [form, setForm] = useState(initialForm);
@@ -117,6 +118,7 @@ export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, pro
       tags: finalTags,
       note: form.note || null,
       linkedTaskId: form.linkedTaskId || null,
+      subProjectId: form.subProjectId || '',
     });
   };
 
@@ -130,19 +132,19 @@ export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, pro
         className={
           isDrawer
             ? `fixed right-0 top-0 h-full w-[480px] max-w-full bg-white shadow-2xl flex flex-col transform transition-transform duration-300 ease-out ${mounted ? 'translate-x-0' : 'translate-x-full'}`
-            : 'bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden'
+            : 'bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden'
         }
         onClick={e => e.stopPropagation()}
       >
-        <div className={`flex justify-between items-center p-4 border-b border-gray-100 ${isDrawer ? 'shrink-0' : ''}`}>
+        <div className="flex justify-between items-center p-4 border-b border-gray-100 shrink-0">
           <h3 className="text-base font-bold text-gray-800">{isEdit ? '編輯 Todo' : '新增 Todo'}</h3>
           <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600">
             <X size={20} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className={isDrawer ? 'flex-1 flex flex-col min-h-0' : ''}>
-          <div className={isDrawer ? 'flex-1 overflow-y-auto p-4 space-y-3' : 'p-4 space-y-3'}>
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {/* Title */}
           <div>
             <label className="text-xs font-medium text-gray-600 block mb-1">標題 *</label>
@@ -252,6 +254,23 @@ export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, pro
             </datalist>
           </div>
 
+          {/* Sub-project */}
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">所屬 Sub-project</label>
+            <select
+              value={form.subProjectId}
+              onChange={e => setForm(f => ({ ...f, subProjectId: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none"
+            >
+              <option value="">無</option>
+              {subProjects.map(sp => {
+                const proj = projects.find(p => p.id === sp.burnupProjectId);
+                const label = proj ? `${proj.name} / ${sp.name}` : sp.name;
+                return <option key={sp.id} value={sp.id}>{label}</option>;
+              })}
+            </select>
+          </div>
+
           {/* Linked Task */}
           <div>
             <label className="text-xs font-medium text-gray-600 block mb-1">關聯任務</label>
@@ -351,10 +370,7 @@ export default function TodoFormModal({ todo, statuses, allTasks: _allTasks, pro
           </div>
 
           {/* Buttons */}
-          <div className={isDrawer
-            ? 'border-t border-gray-100 p-3 flex justify-between items-center shrink-0 bg-white'
-            : 'flex justify-between items-center px-4 pb-4 pt-2'
-          }>
+          <div className="border-t border-gray-100 p-3 flex justify-between items-center shrink-0 bg-white">
             {isEdit && !showDeleteConfirm && (
               <button
                 type="button"

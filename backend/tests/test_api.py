@@ -1119,3 +1119,279 @@ def test_update_user_no_changes(client: TestClient, auth: Dict[str, str]) -> Non
     )
     assert resp.status_code == 200
     assert resp.json()["username"] == "nochange"
+
+
+# ---------------------------------------------------------------------------
+# Sub-project tests
+# ---------------------------------------------------------------------------
+
+
+def _make_sub_project(
+    client: TestClient,
+    auth: Dict[str, str],
+    project_id: str,
+    **overrides: Any,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {"name": "SP one", "priority": "high"}
+    payload.update(overrides)
+    resp = client.post(
+        f"/api/projects/{project_id}/sub-projects",
+        json=payload,
+        headers=auth,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def test_sub_project_crud(client: TestClient, auth: Dict[str, str]) -> None:
+    project = create_project(client, "Big", headers=auth)
+    sp = _make_sub_project(
+        client,
+        auth,
+        project["id"],
+        name="Login rewrite",
+        description="auth overhaul",
+        owner="alice",
+        dueDate="2026-05-01",
+        tags=["auth", "sec"],
+    )
+    assert sp["name"] == "Login rewrite"
+    assert sp["burnupProjectId"] == project["id"]
+    assert sp["activeWaitingCount"] == 0
+    assert sp["linkedTaskIds"] == []
+    assert sp["tags"] == ["auth", "sec"]
+
+    # list by burnup project
+    resp = client.get(f"/api/projects/{project['id']}/sub-projects", headers=auth)
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+
+    # list all
+    resp = client.get("/api/sub-projects", headers=auth)
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+
+    # update
+    resp = client.patch(
+        f"/api/sub-projects/{sp['id']}",
+        json={"status": "paused", "description": "on hold"},
+        headers=auth,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "paused"
+    assert resp.json()["description"] == "on hold"
+
+    # delete
+    resp = client.delete(f"/api/sub-projects/{sp['id']}", headers=auth)
+    assert resp.status_code == 204
+    resp = client.get(f"/api/projects/{project['id']}/sub-projects", headers=auth)
+    assert resp.json() == []
+
+
+def test_sub_project_link_multiple_tasks(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
+    project = create_project(client, "Big", headers=auth)
+    task_a = create_task(client, project["id"], "A", headers=auth)
+    task_b = create_task(client, project["id"], "B", headers=auth)
+
+    sp = _make_sub_project(
+        client,
+        auth,
+        project["id"],
+        linkedTaskIds=[task_a["id"], task_b["id"]],
+    )
+    assert set(sp["linkedTaskIds"]) == {task_a["id"], task_b["id"]}
+
+    # replace via update
+    resp = client.patch(
+        f"/api/sub-projects/{sp['id']}",
+        json={"linkedTaskIds": [task_a["id"]]},
+        headers=auth,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["linkedTaskIds"] == [task_a["id"]]
+
+
+def test_sub_project_link_unknown_task_rejected(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
+    project = create_project(client, "Big", headers=auth)
+    resp = client.post(
+        f"/api/projects/{project['id']}/sub-projects",
+        json={"name": "x", "linkedTaskIds": ["bogus_task"]},
+        headers=auth,
+    )
+    assert resp.status_code == 400
+
+
+def test_sub_project_event_crud(client: TestClient, auth: Dict[str, str]) -> None:
+    project = create_project(client, "Big", headers=auth)
+    sp = _make_sub_project(client, auth, project["id"])
+
+    # create waiting event
+    resp = client.post(
+        f"/api/sub-projects/{sp['id']}/events",
+        json={"type": "waiting", "title": "waiting for PM", "waitingOn": "PM"},
+        headers=auth,
+    )
+    assert resp.status_code == 201
+    event = resp.json()
+    assert event["type"] == "waiting"
+    assert event["waitingOn"] == "PM"
+    assert event["resolvedAt"] is None
+
+    # create note event
+    resp = client.post(
+        f"/api/sub-projects/{sp['id']}/events",
+        json={"type": "note", "title": "kickoff meeting done"},
+        headers=auth,
+    )
+    assert resp.status_code == 201
+
+    # list events
+    resp = client.get(f"/api/sub-projects/{sp['id']}/events", headers=auth)
+    assert resp.status_code == 200
+    assert len(resp.json()) == 2
+
+    # waiting count on sub-project
+    resp = client.get(f"/api/projects/{project['id']}/sub-projects", headers=auth)
+    assert resp.json()[0]["activeWaitingCount"] == 1
+
+    # resolve the waiting event
+    resp = client.patch(
+        f"/api/events/{event['id']}",
+        json={"resolvedAt": "2026-04-20T10:00:00"},
+        headers=auth,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["resolvedAt"] == "2026-04-20T10:00:00"
+
+    # waiting count now 0
+    resp = client.get(f"/api/projects/{project['id']}/sub-projects", headers=auth)
+    assert resp.json()[0]["activeWaitingCount"] == 0
+
+    # delete event
+    resp = client.delete(f"/api/events/{event['id']}", headers=auth)
+    assert resp.status_code == 204
+
+
+def test_sub_project_event_invalid_type_rejected(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
+    project = create_project(client, "Big", headers=auth)
+    sp = _make_sub_project(client, auth, project["id"])
+    resp = client.post(
+        f"/api/sub-projects/{sp['id']}/events",
+        json={"type": "bogus", "title": "x"},
+        headers=auth,
+    )
+    assert resp.status_code == 422
+
+
+def test_sub_project_event_parent_must_exist(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
+    resp = client.post(
+        "/api/sub-projects/nonexistent/events",
+        json={"type": "note", "title": "x"},
+        headers=auth,
+    )
+    assert resp.status_code == 404
+
+    resp = client.post(
+        "/api/todos/nonexistent/events",
+        json={"type": "note", "title": "x"},
+        headers=auth,
+    )
+    assert resp.status_code == 404
+
+
+def test_todo_event_crud(client: TestClient, auth: Dict[str, str]) -> None:
+    resp = client.post("/api/todos", json={"title": "t"}, headers=auth)
+    assert resp.status_code == 201
+    todo_id = resp.json()["id"]
+
+    resp = client.post(
+        f"/api/todos/{todo_id}/events",
+        json={"type": "waiting", "title": "waiting for review", "waitingOn": "Lead"},
+        headers=auth,
+    )
+    assert resp.status_code == 201
+    assert resp.json()["parentType"] == "todo"
+
+    resp = client.get(f"/api/todos/{todo_id}/events", headers=auth)
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1
+
+
+def test_todo_sub_project_link(client: TestClient, auth: Dict[str, str]) -> None:
+    project = create_project(client, "Big", headers=auth)
+    sp = _make_sub_project(client, auth, project["id"])
+
+    # create todo with sub_project_id
+    resp = client.post(
+        "/api/todos",
+        json={"title": "t", "subProjectId": sp["id"]},
+        headers=auth,
+    )
+    assert resp.status_code == 201
+    todo = resp.json()
+    assert todo["subProjectId"] == sp["id"]
+
+    # create todo with unknown sub_project_id → 400
+    resp = client.post(
+        "/api/todos",
+        json={"title": "t2", "subProjectId": "bogus"},
+        headers=auth,
+    )
+    assert resp.status_code == 400
+
+    # update to clear
+    resp = client.patch(
+        f"/api/todos/{todo['id']}",
+        json={"subProjectId": ""},
+        headers=auth,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["subProjectId"] is None
+
+    # update to set
+    resp = client.patch(
+        f"/api/todos/{todo['id']}",
+        json={"subProjectId": sp["id"]},
+        headers=auth,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["subProjectId"] == sp["id"]
+
+
+def test_cascade_delete_sub_project_clears_todo_and_events(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
+    project = create_project(client, "Big", headers=auth)
+    sp = _make_sub_project(client, auth, project["id"])
+
+    # create an event
+    client.post(
+        f"/api/sub-projects/{sp['id']}/events",
+        json={"type": "waiting", "title": "w"},
+        headers=auth,
+    )
+    # create a todo linked to sub-project
+    resp = client.post(
+        "/api/todos",
+        json={"title": "t", "subProjectId": sp["id"]},
+        headers=auth,
+    )
+    todo_id = resp.json()["id"]
+
+    # delete sub-project
+    resp = client.delete(f"/api/sub-projects/{sp['id']}", headers=auth)
+    assert resp.status_code == 204
+
+    # todo still exists but sub_project_id cleared
+    resp = client.get("/api/todos", headers=auth)
+    todos = [t for t in resp.json() if t["id"] == todo_id]
+    assert len(todos) == 1
+    assert todos[0]["subProjectId"] is None

@@ -4,6 +4,9 @@ import { Upload, Download, Plus, Trash2, Calendar, User, AlertTriangle, CheckCir
 import Holidays from 'date-holidays';
 import TodoBoard from './components/TodoBoard';
 import TodoSection from './components/TodoSection';
+import SubProjectSection from './components/SubProjectSection';
+import SearchModal from './components/SearchModal';
+import KeyboardShortcutsHelp from './components/KeyboardShortcutsHelp';
 import { requestJson } from './api';
 import { useAuth } from './auth/AuthContext';
 import LoginPage from './auth/LoginPage';
@@ -446,6 +449,19 @@ function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }
   // Todo & Status State
   const [todos, setTodos] = useState([]);
   const [statuses, setStatuses] = useState([]);
+  const [subProjects, setSubProjects] = useState([]);
+  const [showSearch, setShowSearch] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowSearch(v => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const [pendingEditTodoId, setPendingEditTodoId] = useState(null);
 
   const { getExpectedEndDate, getExpectedPoints, loading: _holidayLoading } = useTaiwanCalendar();
@@ -495,6 +511,10 @@ function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }
           const todoData = await requestJson("/api/todos");
           if (isActive) setTodos(Array.isArray(todoData) ? todoData : []);
         } catch {}
+        try {
+          const subProjectData = await requestJson("/api/sub-projects");
+          if (isActive) setSubProjects(Array.isArray(subProjectData) ? subProjectData : []);
+        } catch {}
       } catch (_err) {
         if (!isActive) return;
         setApiAvailable(false);
@@ -516,17 +536,65 @@ function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }
     let isActive = true;
     (async () => {
       try {
-        const [statusData, todoData] = await Promise.all([
+        const [statusData, todoData, subProjectData] = await Promise.all([
           requestJson("/api/statuses"),
           requestJson("/api/todos"),
+          requestJson("/api/sub-projects"),
         ]);
         if (!isActive) return;
         setStatuses(Array.isArray(statusData) ? statusData : []);
         setTodos(Array.isArray(todoData) ? todoData : []);
+        setSubProjects(Array.isArray(subProjectData) ? subProjectData : []);
       } catch {}
     })();
     return () => { isActive = false; };
   }, [activeProjectId, apiAvailable]);
+
+  const reloadSubProjects = useCallback(async () => {
+    if (!apiAvailable) return;
+    try {
+      const data = await requestJson("/api/sub-projects");
+      setSubProjects(Array.isArray(data) ? data : []);
+    } catch {}
+  }, [apiAvailable]);
+
+  const handleCreateSubProject = useCallback(async (burnupProjectId, data) => {
+    if (!apiAvailable) return;
+    try {
+      const created = await requestJson(`/api/projects/${burnupProjectId}/sub-projects`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+      setSubProjects(prev => [...prev, created]);
+    } catch (err) {
+      console.error('Failed to create sub-project', err);
+    }
+  }, [apiAvailable]);
+
+  const handleUpdateSubProject = useCallback(async (id, data) => {
+    if (!apiAvailable) return;
+    try {
+      const updated = await requestJson(`/api/sub-projects/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+      setSubProjects(prev => prev.map(sp => sp.id === id ? updated : sp));
+    } catch (err) {
+      console.error('Failed to update sub-project', err);
+    }
+  }, [apiAvailable]);
+
+  const handleDeleteSubProject = useCallback(async (id) => {
+    if (!apiAvailable) return;
+    try {
+      await requestJson(`/api/sub-projects/${id}`, { method: 'DELETE' });
+      setSubProjects(prev => prev.filter(sp => sp.id !== id));
+      // Clear sub_project_id from local todos matching
+      setTodos(prev => prev.map(t => t.subProjectId === id ? { ...t, subProjectId: null } : t));
+    } catch (err) {
+      console.error('Failed to delete sub-project', err);
+    }
+  }, [apiAvailable]);
 
   const fileInputRef = useRef(null);
 
@@ -1914,6 +1982,19 @@ function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800 font-sans pb-10">
+      {showSearch && (
+        <SearchModal
+          todos={todos}
+          subProjects={subProjects}
+          statuses={statuses}
+          onSelect={(todoId) => {
+            setShowSearch(false);
+            setPendingEditTodoId(todoId);
+            setActiveProjectId(TODO_TAB_ID);
+          }}
+          onClose={() => setShowSearch(false)}
+        />
+      )}
       <datalist id="people-options">
         {uniquePeople.map(person => (
           <option key={person} value={person} />
@@ -2351,6 +2432,7 @@ function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }
               statuses={statuses}
               allTasks={allTasksFlat}
               projects={projects}
+              subProjects={subProjects}
               onCreateTodo={createTodo}
               onUpdateTodo={updateTodo}
               onDeleteTodo={deleteTodo}
@@ -2365,6 +2447,24 @@ function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }
               onClearInitialEditTodoId={() => setPendingEditTodoId(null)}
             />
           </div>
+          {/* Sub-projects section in Todo tab — grouped by burnup project */}
+          {projects.map(proj => {
+            const projSubs = subProjects.filter(sp => sp.burnupProjectId === proj.id);
+            if (projSubs.length === 0) return null;
+            return (
+              <SubProjectSection
+                key={proj.id}
+                burnupProjectId={proj.id}
+                burnupProjectName={proj.name}
+                subProjects={subProjects}
+                tasks={proj.tasks || []}
+                onCreate={handleCreateSubProject}
+                onUpdate={handleUpdateSubProject}
+                onDelete={handleDeleteSubProject}
+                onReload={reloadSubProjects}
+              />
+            );
+          })}
         </div>
       ) : (
       <>
@@ -2852,9 +2952,23 @@ function BurnupChartInner({ showAdminPanel: _showAdminPanel, setShowAdminPanel }
           </div>
         </div>
 
+        {/* Sub-projects: only when a specific project is selected (not merged view) */}
+        {activeProjectId !== MERGED_TAB_ID && activeProject && (
+          <SubProjectSection
+            burnupProjectId={activeProject.id}
+            subProjects={subProjects}
+            tasks={allTasks}
+            onCreate={handleCreateSubProject}
+            onUpdate={handleUpdateSubProject}
+            onDelete={handleDeleteSubProject}
+            onReload={reloadSubProjects}
+          />
+        )}
+
       </div>
       </>
       )}
+      <KeyboardShortcutsHelp />
     </div>
   );
 }

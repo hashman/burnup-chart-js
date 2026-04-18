@@ -1,5 +1,6 @@
 import React from 'react';
 import { Calendar, MessageSquare } from 'lucide-react';
+import { assigneeColor } from '../utils/assigneeColor';
 
 const PRIORITY_STYLES = {
   high: { border: 'border-l-red-500', badge: 'bg-red-50 text-red-600' },
@@ -9,30 +10,7 @@ const PRIORITY_STYLES = {
 
 const PRIORITY_LABELS = { high: '高', medium: '中', low: '低' };
 
-const ASSIGNEE_COLORS = [
-  'bg-rose-400',
-  'bg-orange-400',
-  'bg-amber-400',
-  'bg-lime-500',
-  'bg-emerald-500',
-  'bg-teal-500',
-  'bg-cyan-500',
-  'bg-sky-500',
-  'bg-indigo-400',
-  'bg-violet-500',
-  'bg-fuchsia-500',
-  'bg-pink-500',
-];
-
-function assigneeColor(name) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = (hash * 31 + name.charCodeAt(i)) | 0;
-  }
-  return ASSIGNEE_COLORS[Math.abs(hash) % ASSIGNEE_COLORS.length];
-}
-
-export default function TodoCard({ todo, isDone, onEdit, onDragStart, onDragEnd, allTasks }) {
+export default function TodoCard({ todo, isDone, onEdit, onDragStart, onDragEnd, allTasks, subProject }) {
   const ps = PRIORITY_STYLES[todo.priority] || PRIORITY_STYLES.medium;
 
   const linkedTask = todo.linkedTaskId
@@ -67,8 +45,13 @@ export default function TodoCard({ todo, isDone, onEdit, onDragStart, onDragEnd,
         </span>
       </div>
 
-      {/* Linked Task */}
-      <div className="text-xs text-gray-500 mb-2">
+      {/* Sub-project + Linked Task */}
+      <div className="text-xs text-gray-500 mb-2 flex items-center gap-1.5 flex-wrap">
+        {subProject && (
+          <span className="bg-violet-50 text-violet-700 px-1.5 py-0.5 rounded text-[11px] font-medium">
+            {subProject.name}
+          </span>
+        )}
         {linkedTask ? (
           <span className="text-indigo-500">🔗 {linkedTask.name}</span>
         ) : todo.linkedTaskId ? (

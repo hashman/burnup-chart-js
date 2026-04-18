@@ -144,6 +144,7 @@ class TodoCreate(BaseModel):
     tags: List[str] = Field(default_factory=list)
     note: Optional[str] = None
     linkedTaskId: Optional[str] = None
+    subProjectId: Optional[str] = None
 
 
 class TodoUpdate(BaseModel):
@@ -155,6 +156,7 @@ class TodoUpdate(BaseModel):
     tags: Optional[List[str]] = None
     note: Optional[str] = None
     linkedTaskId: Optional[str] = None
+    subProjectId: Optional[str] = None
     sortOrder: Optional[float] = None
 
 
@@ -184,9 +186,83 @@ class TodoOut(BaseModel):
     tags: List[str] = Field(default_factory=list)
     note: Optional[str] = None
     linkedTaskId: Optional[str] = None
+    subProjectId: Optional[str] = None
     createdAt: str
     sortOrder: float
     comments: List[TodoCommentOut] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Sub-project models
+# ---------------------------------------------------------------------------
+
+
+class SubProjectCreate(BaseModel):
+    id: Optional[str] = None
+    name: str
+    description: Optional[str] = None
+    status: str = "active"
+    owner: Optional[str] = None
+    dueDate: Optional[str] = None
+    priority: str = "medium"
+    tags: List[str] = Field(default_factory=list)
+    linkedTaskIds: List[str] = Field(default_factory=list)
+
+
+class SubProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[str] = None
+    owner: Optional[str] = None
+    dueDate: Optional[str] = None
+    priority: Optional[str] = None
+    tags: Optional[List[str]] = None
+    linkedTaskIds: Optional[List[str]] = None
+    sortOrder: Optional[float] = None
+
+
+class SubProjectOut(BaseModel):
+    id: str
+    burnupProjectId: str
+    name: str
+    description: Optional[str] = None
+    status: str
+    owner: Optional[str] = None
+    dueDate: Optional[str] = None
+    priority: str
+    tags: List[str] = Field(default_factory=list)
+    sortOrder: float
+    linkedTaskIds: List[str] = Field(default_factory=list)
+    activeWaitingCount: int = 0
+    createdAt: str
+
+
+class SubProjectEventCreate(BaseModel):
+    type: str = Field(pattern=r"^(waiting|note|decision)$")
+    title: str
+    body: Optional[str] = None
+    waitingOn: Optional[str] = None
+    startedAt: Optional[str] = None
+
+
+class SubProjectEventUpdate(BaseModel):
+    title: Optional[str] = None
+    body: Optional[str] = None
+    waitingOn: Optional[str] = None
+    resolvedAt: Optional[str] = None
+
+
+class SubProjectEventOut(BaseModel):
+    id: str
+    parentType: str
+    parentId: str
+    type: str
+    title: str
+    body: Optional[str] = None
+    waitingOn: Optional[str] = None
+    startedAt: str
+    resolvedAt: Optional[str] = None
+    createdAt: str
 
 
 # ---------------------------------------------------------------------------

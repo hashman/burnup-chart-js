@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from auth import cleanup_expired_tokens
 from db import init_db
-from routers import auth_routes, logs, projects, statuses, tasks, todos
+from routers import auth_routes, logs, projects, statuses, sub_projects, tasks, todos
 
 app = FastAPI(title="Burnup Chart API")
 
@@ -32,6 +32,7 @@ app.include_router(tasks.router)
 app.include_router(logs.router)
 app.include_router(statuses.router)
 app.include_router(todos.router)
+app.include_router(sub_projects.router)
 
 
 @app.on_event("startup")
