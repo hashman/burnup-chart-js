@@ -28,12 +28,20 @@ def normalize_text(value: Optional[str]) -> str:
 
 
 def row_to_todo_comment(row: sqlite3.Row) -> Dict[str, Any]:
+    # Row may come from a plain `todo_comments` SELECT (no author name) or a
+    # JOIN-enriched row that exposes an `author_name` column.
+    author = None
+    try:
+        author = row["author_name"]
+    except (IndexError, KeyError):
+        author = None
     return {
         "id": row["id"],
         "todoId": row["todo_id"],
         "content": row["content"],
         "createdAt": row["created_at"],
         "updatedAt": row["updated_at"],
+        "author": author,
     }
 
 
@@ -64,13 +72,29 @@ def _fetch_todo_comments(
         return {}
     placeholders = ",".join("?" * len(todo_ids))
     rows = conn.execute(
-        f"SELECT * FROM todo_comments WHERE todo_id IN ({placeholders}) ORDER BY created_at",
+        f"""SELECT c.*, COALESCE(u.display_name, u.username) AS author_name
+            FROM todo_comments c
+            LEFT JOIN users u ON u.id = c.author_id
+            WHERE c.todo_id IN ({placeholders})
+            ORDER BY c.created_at""",
         todo_ids,
     ).fetchall()
     result: Dict[str, List[Dict[str, Any]]] = {}
     for row in rows:
         result.setdefault(row["todo_id"], []).append(row_to_todo_comment(row))
     return result
+
+
+def _fetch_comment_with_author(
+    conn: sqlite3.Connection, comment_id: str
+) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        """SELECT c.*, COALESCE(u.display_name, u.username) AS author_name
+           FROM todo_comments c
+           LEFT JOIN users u ON u.id = c.author_id
+           WHERE c.id = ?""",
+        (comment_id,),
+    ).fetchone()
 
 
 def utc_now() -> str:
@@ -215,11 +239,8 @@ def update_todo(
             conn.commit()
 
         row = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
-        comments = conn.execute(
-            "SELECT * FROM todo_comments WHERE todo_id = ? ORDER BY created_at",
-            (todo_id,),
-        ).fetchall()
-    return row_to_todo(row, [row_to_todo_comment(c) for c in comments])
+        comments_map = _fetch_todo_comments(conn, [todo_id])
+    return row_to_todo(row, comments_map.get(todo_id, []))
 
 
 @router.delete("/todos/{todo_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -263,7 +284,7 @@ def list_task_todos(
 def create_todo_comment(
     todo_id: str,
     payload: TodoCommentCreate,
-    _current_user: dict = Depends(require_member_or_admin),
+    current_user: dict = Depends(require_member_or_admin),
 ) -> Dict[str, Any]:
     comment_id = f"tc_{uuid4().hex}"
     now = utc_now()
@@ -274,13 +295,11 @@ def create_todo_comment(
         if not todo_row:
             raise HTTPException(status_code=404, detail="Todo not found")
         conn.execute(
-            "INSERT INTO todo_comments (id, todo_id, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-            (comment_id, todo_id, payload.content, now, now),
+            "INSERT INTO todo_comments (id, todo_id, content, created_at, updated_at, author_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (comment_id, todo_id, payload.content, now, now, current_user["id"]),
         )
         conn.commit()
-        row = conn.execute(
-            "SELECT * FROM todo_comments WHERE id = ?", (comment_id,)
-        ).fetchone()
+        row = _fetch_comment_with_author(conn, comment_id)
     return row_to_todo_comment(row)
 
 
@@ -302,9 +321,7 @@ def update_todo_comment(
             (payload.content, now, comment_id),
         )
         conn.commit()
-        row = conn.execute(
-            "SELECT * FROM todo_comments WHERE id = ?", (comment_id,)
-        ).fetchone()
+        row = _fetch_comment_with_author(conn, comment_id)
     return row_to_todo_comment(row)
 
 

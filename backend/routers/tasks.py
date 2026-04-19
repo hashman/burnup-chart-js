@@ -17,7 +17,17 @@ def normalize_text(value: Optional[str]) -> str:
 
 
 def row_to_log(row: sqlite3.Row) -> LogPayload:
-    return {"id": row["id"], "date": row["date"], "content": row["content"]}
+    author = None
+    try:
+        author = row["author_name"]
+    except (IndexError, KeyError):
+        author = None
+    return {
+        "id": row["id"],
+        "date": row["date"],
+        "content": row["content"],
+        "author": author,
+    }
 
 
 def row_to_task(row: sqlite3.Row, logs: List[LogPayload]) -> TaskPayload:
@@ -42,7 +52,12 @@ def fetch_task(conn: sqlite3.Connection, task_id: str) -> Optional[TaskPayload]:
     if not task_row:
         return None
     log_rows = conn.execute(
-        "SELECT * FROM logs WHERE task_id = ? ORDER BY created_at", (task_id,)
+        """SELECT l.*, COALESCE(u.display_name, u.username) AS author_name
+           FROM logs l
+           LEFT JOIN users u ON u.id = l.author_id
+           WHERE l.task_id = ?
+           ORDER BY l.created_at""",
+        (task_id,),
     ).fetchall()
     logs = [row_to_log(row) for row in log_rows]
     return row_to_task(task_row, logs)

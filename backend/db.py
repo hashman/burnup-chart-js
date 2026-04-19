@@ -149,6 +149,17 @@ def init_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_sub_project_events_parent ON sub_project_events(parent_type, parent_id);
             CREATE INDEX IF NOT EXISTS idx_sub_project_events_active ON sub_project_events(type, resolved_at);
+            CREATE TABLE IF NOT EXISTS time_entries (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                item TEXT NOT NULL,
+                hours REAL NOT NULL,
+                date TEXT NOT NULL,
+                note TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_time_entries_user_date ON time_entries(user_id, date);
             """
         )
         # Seed default statuses if table is empty
