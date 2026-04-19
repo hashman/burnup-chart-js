@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback, useMemo } from 'react';
+import React, { useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { T, MONO, FONT, weekCode } from '../../design/tokens.js';
 
 // SVG burnup chart — curve | step | area styles.
@@ -6,13 +6,26 @@ import { T, MONO, FONT, weekCode } from '../../design/tokens.js';
 
 export function BurnupChart({ data, annotations = [], style = 'curve', height = 260, today }) {
   const h = height;
-  const w = 640;
   const padL = 32, padR = 12, padT = 10, padB = 22;
-  const innerW = w - padL - padR;
-  const innerH = h - padT - padB;
 
   const wrapRef = useRef(null);
   const [hoverIdx, setHoverIdx] = useState(-1);
+  // The SVG viewBox width tracks the wrapper's actual pixel width so that
+  // 1 viewBox unit == 1 rendered pixel. Without this the default
+  // `preserveAspectRatio="xMidYMid meet"` letterboxes the chart inside
+  // the container and breaks mouse→data-point coordinate mapping.
+  const [w, setW] = useState(640);
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const sync = () => setW(Math.max(320, Math.floor(el.clientWidth || 640)));
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const innerW = w - padL - padR;
+  const innerH = h - padT - padB;
 
   const xs = useMemo(
     () => data && data.length > 0
@@ -102,7 +115,13 @@ export function BurnupChart({ data, annotations = [], style = 'curve', height = 
       onMouseLeave={onMouseLeave}
       style={{ position: 'relative', width: '100%', height: h, cursor: 'crosshair' }}
     >
-      <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} style={{ display: 'block' }}>
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        width="100%"
+        height={h}
+        preserveAspectRatio="none"
+        style={{ display: 'block' }}
+      >
         {/* gridlines */}
         {[0, 25, 50, 75, 100].map(v => (
           <g key={v}>
