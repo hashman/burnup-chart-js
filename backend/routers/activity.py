@@ -58,14 +58,16 @@ def list_activity(
             (project_id, limit),
         ).fetchall()
         for r in log_rows:
-            items.append(ActivityItem(
-                id=f"log:{r['id']}",
-                kind="log",
-                who=r["who"],
-                when=r["when_ts"],
-                text=r["text"],
-                context=r["context"],
-            ))
+            items.append(
+                ActivityItem(
+                    id=f"log:{r['id']}",
+                    kind="log",
+                    who=r["who"],
+                    when=r["when_ts"],
+                    text=r["text"],
+                    context=r["context"],
+                )
+            )
 
         # Todo comments: todo must be linked either to a task in this project
         # OR to a sub-project under this burnup project.
@@ -89,14 +91,16 @@ def list_activity(
             (project_id, project_id, limit),
         ).fetchall()
         for r in comment_rows:
-            items.append(ActivityItem(
-                id=f"comment:{r['id']}",
-                kind="comment",
-                who=r["who"],
-                when=r["when_ts"],
-                text=r["text"],
-                context=r["context"],
-            ))
+            items.append(
+                ActivityItem(
+                    id=f"comment:{r['id']}",
+                    kind="comment",
+                    who=r["who"],
+                    when=r["when_ts"],
+                    text=r["text"],
+                    context=r["context"],
+                )
+            )
 
         # Sub-project events (parent_type = 'sub_project') for sub-projects
         # belonging to this burnup project. Also surface events attached to
@@ -142,15 +146,17 @@ def list_activity(
             if r["body"]:
                 text_parts.append(r["body"])
             text = " · ".join(text_parts) if text_parts else ""
-            items.append(ActivityItem(
-                id=f"event:{r['id']}",
-                kind=kind,
-                who=r["who"],
-                when=r["when_ts"],
-                text=text,
-                context=r["context"],
-                waitingOn=r["waiting_on"] if kind == "waiting" else None,
-            ))
+            items.append(
+                ActivityItem(
+                    id=f"event:{r['id']}",
+                    kind=kind,
+                    who=r["who"],
+                    when=r["when_ts"],
+                    text=text,
+                    context=r["context"],
+                    waitingOn=r["waiting_on"] if kind == "waiting" else None,
+                )
+            )
 
     # Global sort across all sources, newest first, then apply limit.
     items.sort(key=lambda it: it.when or "", reverse=True)

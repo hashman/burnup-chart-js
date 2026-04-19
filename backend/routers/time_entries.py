@@ -28,10 +28,9 @@ DATE_RE = r"^\d{4}-\d{2}-\d{2}$"
 
 def _validate_date(value: str, label: str = "date") -> None:
     import re
+
     if not re.match(DATE_RE, value):
-        raise HTTPException(
-            status_code=400, detail=f"{label} must be YYYY-MM-DD"
-        )
+        raise HTTPException(status_code=400, detail=f"{label} must be YYYY-MM-DD")
 
 
 def _round_quarter(hours: float) -> float:
@@ -102,7 +101,15 @@ def create_time_entry(
         conn.execute(
             """INSERT INTO time_entries (id, user_id, item, hours, date, note, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (entry_id, current_user["id"], item, hours, payload.date, payload.note, now),
+            (
+                entry_id,
+                current_user["id"],
+                item,
+                hours,
+                payload.date,
+                payload.note,
+                now,
+            ),
         )
         conn.commit()
         row = conn.execute(
@@ -287,11 +294,13 @@ def time_entry_summary(
     buckets = []
     for key in sorted(bucket_map.keys(), reverse=True):
         items = bucket_map[key]
-        buckets.append({
-            "key": key,
-            "total": round(sum(items.values()), 2),
-            "items": items_with_percent(items),
-        })
+        buckets.append(
+            {
+                "key": key,
+                "total": round(sum(items.values()), 2),
+                "items": items_with_percent(items),
+            }
+        )
 
     return {
         "period": period,

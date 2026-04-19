@@ -70,7 +70,9 @@ def test_hours_snap_to_quarter(client: TestClient, auth: Dict[str, str]) -> None
     assert e2["hours"] == 2.75
 
 
-def test_zero_or_negative_hours_rejected(client: TestClient, auth: Dict[str, str]) -> None:
+def test_zero_or_negative_hours_rejected(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
     r = client.post(
         "/api/time-entries",
         json={"item": "x", "hours": 0, "date": "2026-04-19"},

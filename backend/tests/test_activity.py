@@ -45,12 +45,17 @@ def _mk_project(client: TestClient, auth: Dict[str, str], name: str) -> Dict[str
     return r.json()
 
 
-def _mk_task(client: TestClient, auth: Dict[str, str], project_id: str, name: str) -> Dict[str, Any]:
+def _mk_task(
+    client: TestClient, auth: Dict[str, str], project_id: str, name: str
+) -> Dict[str, Any]:
     r = client.post(
         f"/api/projects/{project_id}/tasks",
         json={
-            "name": name, "points": 3, "people": "Alice",
-            "addedDate": "2026-04-01", "expectedStart": "2026-04-01",
+            "name": name,
+            "points": 3,
+            "people": "Alice",
+            "addedDate": "2026-04-01",
+            "expectedStart": "2026-04-01",
             "expectedEnd": "2026-04-05",
         },
         headers=auth,
@@ -59,7 +64,9 @@ def _mk_task(client: TestClient, auth: Dict[str, str], project_id: str, name: st
     return r.json()
 
 
-def _mk_log(client: TestClient, auth: Dict[str, str], task_id: str, content: str) -> Dict[str, Any]:
+def _mk_log(
+    client: TestClient, auth: Dict[str, str], task_id: str, content: str
+) -> Dict[str, Any]:
     r = client.post(
         f"/api/tasks/{task_id}/logs",
         json={"date": "2026-04-10", "content": content},
@@ -69,14 +76,18 @@ def _mk_log(client: TestClient, auth: Dict[str, str], task_id: str, content: str
     return r.json()
 
 
-def _mk_todo(client: TestClient, auth: Dict[str, str], title: str, **kw: Any) -> Dict[str, Any]:
+def _mk_todo(
+    client: TestClient, auth: Dict[str, str], title: str, **kw: Any
+) -> Dict[str, Any]:
     payload = {"title": title, **kw}
     r = client.post("/api/todos", json=payload, headers=auth)
     assert r.status_code == 201, r.text
     return r.json()
 
 
-def _mk_comment(client: TestClient, auth: Dict[str, str], todo_id: str, content: str) -> Dict[str, Any]:
+def _mk_comment(
+    client: TestClient, auth: Dict[str, str], todo_id: str, content: str
+) -> Dict[str, Any]:
     r = client.post(
         f"/api/todos/{todo_id}/comments",
         json={"content": content},
@@ -86,7 +97,9 @@ def _mk_comment(client: TestClient, auth: Dict[str, str], todo_id: str, content:
     return r.json()
 
 
-def _mk_sub_project(client: TestClient, auth: Dict[str, str], project_id: str, name: str) -> Dict[str, Any]:
+def _mk_sub_project(
+    client: TestClient, auth: Dict[str, str], project_id: str, name: str
+) -> Dict[str, Any]:
     r = client.post(
         f"/api/projects/{project_id}/sub-projects",
         json={"name": name, "priority": "medium"},
@@ -96,7 +109,14 @@ def _mk_sub_project(client: TestClient, auth: Dict[str, str], project_id: str, n
     return r.json()
 
 
-def _mk_event(client: TestClient, auth: Dict[str, str], sp_id: str, event_type: str, title: str, **kw: Any) -> Dict[str, Any]:
+def _mk_event(
+    client: TestClient,
+    auth: Dict[str, str],
+    sp_id: str,
+    event_type: str,
+    title: str,
+    **kw: Any,
+) -> Dict[str, Any]:
     payload = {"type": event_type, "title": title, **kw}
     r = client.post(
         f"/api/sub-projects/{sp_id}/events",
@@ -117,7 +137,9 @@ def test_activity_requires_project_id(client: TestClient, auth: Dict[str, str]) 
     assert r.status_code == 422
 
 
-def test_activity_empty_project_returns_empty(client: TestClient, auth: Dict[str, str]) -> None:
+def test_activity_empty_project_returns_empty(
+    client: TestClient, auth: Dict[str, str]
+) -> None:
     project = _mk_project(client, auth, "Empty proj")
     r = client.get(f"/api/activity?project_id={project['id']}", headers=auth)
     assert r.status_code == 200

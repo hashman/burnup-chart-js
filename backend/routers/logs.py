@@ -27,9 +27,7 @@ def row_to_log(row: sqlite3.Row) -> LogPayload:
     }
 
 
-def _fetch_log_with_author(
-    conn: sqlite3.Connection, log_id: str
-) -> sqlite3.Row:
+def _fetch_log_with_author(conn: sqlite3.Connection, log_id: str) -> sqlite3.Row:
     return conn.execute(
         """SELECT l.*, COALESCE(u.display_name, u.username) AS author_name
            FROM logs l
