@@ -64,7 +64,11 @@ def fetch_project(
     if task_ids:
         placeholders = ",".join("?" for _ in task_ids)
         log_rows = conn.execute(
-            f"SELECT * FROM logs WHERE task_id IN ({placeholders}) ORDER BY created_at",
+            f"""SELECT l.*, COALESCE(u.display_name, u.username) AS author_name
+                FROM logs l
+                LEFT JOIN users u ON u.id = l.author_id
+                WHERE l.task_id IN ({placeholders})
+                ORDER BY l.created_at""",
             task_ids,
         ).fetchall()
         for row in log_rows:
@@ -90,7 +94,12 @@ def list_projects(
             "SELECT id, name FROM projects ORDER BY created_at"
         ).fetchall()
         task_rows = conn.execute("SELECT * FROM tasks ORDER BY created_at").fetchall()
-        log_rows = conn.execute("SELECT * FROM logs ORDER BY created_at").fetchall()
+        log_rows = conn.execute(
+            """SELECT l.*, COALESCE(u.display_name, u.username) AS author_name
+               FROM logs l
+               LEFT JOIN users u ON u.id = l.author_id
+               ORDER BY l.created_at"""
+        ).fetchall()
 
     logs_by_task: Dict[str, List[LogPayload]] = {}
     for row in log_rows:

@@ -14,7 +14,27 @@ router = APIRouter(prefix="/api", tags=["logs"])
 
 
 def row_to_log(row: sqlite3.Row) -> LogPayload:
-    return {"id": row["id"], "date": row["date"], "content": row["content"]}
+    author = None
+    try:
+        author = row["author_name"]
+    except (IndexError, KeyError):
+        author = None
+    return {
+        "id": row["id"],
+        "date": row["date"],
+        "content": row["content"],
+        "author": author,
+    }
+
+
+def _fetch_log_with_author(conn: sqlite3.Connection, log_id: str) -> sqlite3.Row:
+    return conn.execute(
+        """SELECT l.*, COALESCE(u.display_name, u.username) AS author_name
+           FROM logs l
+           LEFT JOIN users u ON u.id = l.author_id
+           WHERE l.id = ?""",
+        (log_id,),
+    ).fetchone()
 
 
 def utc_now() -> str:
@@ -29,7 +49,7 @@ def utc_now() -> str:
 def create_log(
     task_id: str,
     payload: LogCreate,
-    _current_user: dict = Depends(require_member_or_admin),
+    current_user: dict = Depends(require_member_or_admin),
 ) -> LogPayload:
     log_id = payload.id or f"log_{uuid4().hex}"
     now = utc_now()
@@ -46,13 +66,13 @@ def create_log(
             raise HTTPException(status_code=409, detail="Log id already exists")
 
         conn.execute(
-            "INSERT INTO logs (id, task_id, date, content, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (log_id, task_id, payload.date, payload.content, now),
+            "INSERT INTO logs (id, task_id, date, content, created_at, author_id) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (log_id, task_id, payload.date, payload.content, now, current_user["id"]),
         )
         conn.commit()
 
-        log_row = conn.execute("SELECT * FROM logs WHERE id = ?", (log_id,)).fetchone()
+        log_row = _fetch_log_with_author(conn, log_id)
 
     return row_to_log(log_row)
 

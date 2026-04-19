@@ -5,9 +5,37 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 # Type aliases
-LogPayload = Dict[str, str]
+LogPayload = Dict[str, Any]
 TaskPayload = Dict[str, Any]
 ProjectPayload = Dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# Time-entry models (per-user work-time log)
+# ---------------------------------------------------------------------------
+
+
+class TimeEntryCreate(BaseModel):
+    item: str
+    hours: float = Field(gt=0)
+    date: str  # YYYY-MM-DD
+    note: Optional[str] = None
+
+
+class TimeEntryUpdate(BaseModel):
+    item: Optional[str] = None
+    hours: Optional[float] = Field(default=None, gt=0)
+    date: Optional[str] = None
+    note: Optional[str] = None
+
+
+class TimeEntryOut(BaseModel):
+    id: str
+    item: str
+    hours: float
+    date: str
+    note: Optional[str] = None
+    createdAt: str
 
 
 # ---------------------------------------------------------------------------
@@ -25,6 +53,7 @@ class LogOut(BaseModel):
     id: str
     date: str
     content: str
+    author: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +203,7 @@ class TodoCommentOut(BaseModel):
     content: str
     createdAt: str
     updatedAt: str
+    author: Optional[str] = None
 
 
 class TodoOut(BaseModel):

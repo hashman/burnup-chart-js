@@ -35,6 +35,12 @@ export async function requestJson(path, options = {}) {
   return response.json();
 }
 
+export async function fetchActivity(projectId, limit = 50) {
+  if (!projectId) return [];
+  const params = new URLSearchParams({ project_id: projectId, limit: String(limit) });
+  return requestJson(`/api/activity?${params.toString()}`);
+}
+
 export async function requestJsonNoAuth(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
