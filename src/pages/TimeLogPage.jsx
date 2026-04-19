@@ -285,10 +285,13 @@ function EntryRow({ entry, color, editing, onStartEdit, onCancelEdit, onUpdate, 
   const [draft, setDraft] = useState({
     item: entry.item, hours: String(entry.hours), date: entry.date, note: entry.note || '',
   });
-
-  useEffect(() => {
+  // Re-sync the draft whenever the backing entry changes (e.g. after a
+  // successful update). Render-time prop sync avoids setState-in-effect.
+  const [lastEntry, setLastEntry] = useState(entry);
+  if (entry !== lastEntry) {
+    setLastEntry(entry);
     setDraft({ item: entry.item, hours: String(entry.hours), date: entry.date, note: entry.note || '' });
-  }, [entry]);
+  }
 
   const save = async () => {
     const patch = {

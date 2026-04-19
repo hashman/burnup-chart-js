@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useMemo } from 'react';
 import { T, MONO, FONT, weekCode } from '../../design/tokens.js';
 
 // SVG burnup chart — curve | step | area styles.
@@ -14,9 +14,12 @@ export function BurnupChart({ data, annotations = [], style = 'curve', height = 
   const wrapRef = useRef(null);
   const [hoverIdx, setHoverIdx] = useState(-1);
 
-  const xs = data && data.length > 0
-    ? data.map((_, i) => padL + (i / Math.max(1, data.length - 1)) * innerW)
-    : [];
+  const xs = useMemo(
+    () => data && data.length > 0
+      ? data.map((_, i) => padL + (i / Math.max(1, data.length - 1)) * innerW)
+      : [],
+    [data, padL, innerW],
+  );
 
   const onMouseMove = useCallback((e) => {
     const el = wrapRef.current;

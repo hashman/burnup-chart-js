@@ -61,7 +61,18 @@ export function SearchModal({ tasks = [], todos = [], endStatusId, today, onPick
       .map(x => x.item);
   }, [query, corpus, fuse]);
 
-  useEffect(() => { setActive(0); }, [query]);
+  // Reset the highlight when the query changes (render-time sync).
+  const [lastQuery, setLastQuery] = useState(query);
+  if (query !== lastQuery) {
+    setLastQuery(query);
+    setActive(0);
+  }
+
+  const pickItem = (item) => {
+    if (item.kind === 'task') onPickTask?.(item.raw);
+    else onPickTodo?.(item.raw);
+    onClose?.();
+  };
 
   useEffect(() => {
     const onKey = (e) => {
@@ -87,12 +98,6 @@ export function SearchModal({ tasks = [], todos = [], endStatusId, today, onPick
     const el = listRef.current?.querySelector(`[data-idx="${active}"]`);
     el?.scrollIntoView({ block: 'nearest' });
   }, [active]);
-
-  const pickItem = (item) => {
-    if (item.kind === 'task') onPickTask?.(item.raw);
-    else onPickTodo?.(item.raw);
-    onClose?.();
-  };
 
   return (
     <div style={overlay} onClick={onClose}>

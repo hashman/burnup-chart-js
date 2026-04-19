@@ -76,7 +76,11 @@ export function SubProjectsPage({ data }) {
     setEventsLoading(false);
   };
 
-  useEffect(() => { refreshEvents(selected?.id); }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Load the selected sub-project's events whenever the selection changes.
+  // This is a legitimate data-fetching effect (async state sync with an
+  // external system), hence the disable.
+  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+  useEffect(() => { refreshEvents(selected?.id); }, [selected?.id]);
 
   const waitingCount = projectSubs.reduce((n, s) => n + (s.activeWaitingCount || 0), 0);
 

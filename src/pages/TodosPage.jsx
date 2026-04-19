@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { T, FONT } from '../design/tokens.js';
 import { Btn } from '../design/primitives.jsx';
 import { KanbanBoard } from '../components/todo/KanbanBoard.jsx';
@@ -14,14 +14,17 @@ export function TodosPage({ data, initialEditTodoId, onClearInitialEditTodoId })
   } = data;
 
   const [modalTodo, setModalTodo] = useState(null); // current todo for editing; {} for new
+  const [lastInitialEditTodoId, setLastInitialEditTodoId] = useState(null);
 
-  // Honour an external request to open a specific todo (e.g. from Cmd+K).
-  useEffect(() => {
-    if (!initialEditTodoId) return;
+  // Honour an external request to open a specific todo (e.g. from Cmd+K)
+  // via a render-time prop sync (avoids setState-in-effect).
+  if (initialEditTodoId && initialEditTodoId !== lastInitialEditTodoId) {
+    setLastInitialEditTodoId(initialEditTodoId);
     const target = todos.find(t => t.id === initialEditTodoId);
     if (target) setModalTodo(target);
     onClearInitialEditTodoId?.();
-  }, [initialEditTodoId, todos, onClearInitialEditTodoId]);
+  }
+
   const [filterAssignees, setFilterAssignees] = useState(new Set());
   const [filterPriorities, setFilterPriorities] = useState(new Set());
   const [filterTags, setFilterTags] = useState(new Set());

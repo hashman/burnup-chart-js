@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { T, MONO } from '../../design/tokens.js';
 
 // Drag to set + click-to-type percentage cell.
@@ -13,7 +13,13 @@ export function ProgressCell({ value, onCommit, done, disabled }) {
   const [dragValue, setDragValue] = useState(value ?? 0);
   const barRef = useRef(null);
 
-  useEffect(() => { setTyped(String(value ?? 0)); }, [value]);
+  // Sync the local typed draft when the committed value changes via
+  // render-time state update (instead of useEffect+setState).
+  const [lastValue, setLastValue] = useState(value);
+  if (value !== lastValue) {
+    setLastValue(value);
+    setTyped(String(value ?? 0));
+  }
 
   const commitFromMouse = (e) => {
     const el = barRef.current;
